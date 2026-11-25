@@ -9,6 +9,7 @@
 #include "r328_hal_i2c.h"
 #include "r328_hal_i2s.h"
 #include "r328_hal_tim.h"
+#include "r328_hal_ledc.h"
 #include "r328_hal_gic.h"
 
 HAL_StatusTypeDef HAL_Init(void);

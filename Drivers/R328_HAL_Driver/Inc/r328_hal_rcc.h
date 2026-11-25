@@ -19,4 +19,6 @@ uint32_t HAL_RCC_GetAudioPLL4XFreq(void);
 HAL_StatusTypeDef HAL_RCC_I2S_EnableClock(I2S_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_I2S_ForceReset(I2S_TypeDef *instance);
 uint32_t HAL_RCC_GetI2SClockFreq(I2S_TypeDef *instance);
+HAL_StatusTypeDef HAL_RCC_LEDC_EnableClock(LEDC_TypeDef *instance);
+HAL_StatusTypeDef HAL_RCC_LEDC_ForceReset(LEDC_TypeDef *instance);
 #endif

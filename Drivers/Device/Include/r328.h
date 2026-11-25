@@ -26,6 +26,8 @@
 #define RCC_SPI_BGR R328_CCU_REG(0x096CU)
 #define RCC_I2S_CLK(index) R328_CCU_REG(0x0A10U + 4U * (index))
 #define RCC_I2S_BGR R328_CCU_REG(0x0A1CU)
+#define RCC_LEDC_CLK R328_CCU_REG(0x0BF0U)
+#define RCC_LEDC_BGR R328_CCU_REG(0x0BFCU)
 #define RCC_PLL_AUDIO_CTRL R328_CCU_REG(0x0078U)
 #define RCC_PLL_AUDIO_PAT0 R328_CCU_REG(0x0178U)
 
@@ -120,6 +122,17 @@ typedef struct
 
 typedef struct
 {
+    __IO uint32_t CTRL, TIMING, FINISH, RESET_TIMING, WAIT_TIME0, DATA;
+    __IO uint32_t DMA_CTRL, INT_CTRL, INT_STS;
+    uint32_t RESERVED0;
+    __IO uint32_t WAIT_TIME1;
+    uint32_t RESERVED1;
+    __IO uint32_t FIFO_DATA[32];
+} LEDC_TypeDef;
+#define LEDC ((LEDC_TypeDef *)0x06700000UL)
+
+typedef struct
+{
     __IO uint32_t CTRL;
     __IO uint32_t INTV;
     __IO uint32_t CUR;
@@ -143,6 +156,7 @@ typedef enum
     GPIOE_IRQn = 76,
     GPIOG_IRQn = 78,
     GPIOH_IRQn = 79,
+    LEDC_IRQn = 92,
     I2S0_IRQn = 99,
     I2S1_IRQn = 100,
     I2S2_IRQn = 101,
@@ -170,6 +184,8 @@ _Static_assert(offsetof(SPI_TypeDef, RXD) == 0x300, "SPI RXD offset");
 _Static_assert(offsetof(I2C_TypeDef, DRV_CTRL) == 0x200, "TWI driver offset");
 _Static_assert(offsetof(I2S_TypeDef, RXCHSEL) == 0x64, "I2S RX select offset");
 _Static_assert(offsetof(I2S_TypeDef, RXCHMAP[3]) == 0x74, "I2S RX mapping offset");
+_Static_assert(offsetof(LEDC_TypeDef, INT_STS) == 0x20, "LEDC status offset");
+_Static_assert(offsetof(LEDC_TypeDef, FIFO_DATA) == 0x30, "LEDC FIFO snapshot offset");
 
 extern uint32_t SystemCoreClock;
 void SystemInit(void);

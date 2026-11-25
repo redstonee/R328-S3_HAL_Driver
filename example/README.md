@@ -21,6 +21,7 @@
 | I²C | [memory](i2c/memory/main.c) | 可配置设备与寄存器地址，重复 START 读取 |
 | [I²S](i2s/README.md) | [silence](i2s/silence/main.c) | 48 kHz 有限静音块 |
 | I²S | [tone](i2s/tone/main.c) | PCM16 左 1 kHz / 右 500 Hz 三角波数据块 |
+| [LEDC](ledc/README.md) | [ws2812](ledc/ws2812/main.c) | 4 颗 WS2812，颜色、流水与呼吸灯效 |
 | [SRAM](sram/README.md) | [memory](sram/memory/main.c) | 完整 SRAM 配置下的空闲区写入 / 回读 |
 | [DRAM](dram/README.md) | [memory](dram/memory/main.c) | DDR 空闲区 walking 1/0、固定模式与地址 / 反相地址校验 |
 | [RCC](rcc/README.md) | [clocks](rcc/clocks/main.c) | 查询 CPU、APB2、架构计数器与音频时钟 |

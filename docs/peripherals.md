@@ -1,4 +1,4 @@
-# SPI、I²C / TWI、I²S / IIS
+# SPI、I²C / TWI、I²S / IIS、LEDC
 
 接口采用 `Handle / Init / MspInit / HAL_StatusTypeDef`。先调用 `HAL_Init()` 建立时基，再配置 APB2 和控制台，之后按需初始化外设。每个控制器使用一个持续有效的句柄，仅供 CPU0 使用；轮询调用建议放在前台。
 
@@ -13,6 +13,7 @@ HAL 负责控制器寄存器，MSP 负责引脚复用。`BSP/` 提供例程使�
 | SPI1 两路 GPIO CS | PH4 / PH8，低有效 | MSP 和 `BSP/Src/board_bus.c` |
 | TWI1 SCL / SDA | PB8 / PB9，AF4 | `Core/Src/r328_hal_msp.c` |
 | I²S0 LRCK / BCLK / DOUT0 | PB2 / PB3，AF5；PB4，AF4 | `Core/Src/r328_hal_msp.c` |
+| LEDC DO | PE2，AF2 | `Core/Src/r328_hal_msp.c` |
 
 ```c
 HAL_StatusTypeDef status = Board_SPI1_Init(1000000U);
@@ -86,12 +87,39 @@ if (Board_I2S0_Init(48000U, 16U) == HAL_OK) {
 
 每次调用处理有限音频块：预填、启动、轮询、等待尾帧、停止。最后一帧后保留至少约 1 ms 尾部时钟，可能输出零样本；调用间存在间隙。连续播放/录音需要 DMA 或中断环形缓冲。
 
+## LEDC
+
+支持硬件 LEDC 的轮询整帧发送，1–1024 颗串联 RGB 灯，每灯一个 `uint32_t`，低 24 位为 `0xGGRRBB`，高位先发。`HAL_LEDC_ColorRGB(r, g, b)` 将 RGB 分量转换为传输字。
+
+```c
+uint32_t pixels[BOARD_WS2812_LED_COUNT] = {0};
+if (Board_LEDC_Init(BOARD_WS2812_LED_COUNT) == HAL_OK)
+{
+    pixels[0] = HAL_LEDC_ColorRGB(16U, 0U, 0U);
+    HAL_StatusTypeDef status = HAL_LEDC_Transmit(
+        &hledc, pixels, BOARD_WS2812_LED_COUNT, 100U);
+    (void)status;
+}
+```
+
+LEDC 模块时钟固定为 OSC24M / 1。`Init.T0H/T0L/T1H/T1L` 的单位是 24 MHz 时钟周期，分别限制为 2–32、2–64、2–64、2–32；驱动转换成寄存器的周期数减一编码。`ResetTimeUs` 与 `WaitDataTimeUs` 均为 1–341 µs，后者限制等待 FIFO 后续数据的时间。
+
+`Board_LEDC_Init()` 默认设置 7/23/23/7 周期，即 800 kbit/s、约 292/958 ns 的短/长脉冲、300 µs 帧复位和 50 µs 缺数等待，适配 XL-5050RGBC-WS2812B。该设置与 I²S 音频 PLL、APB2 分频无关。
+
+发送数量必须等于 `Init.LEDCount`。启动前预填最多 32 个 FIFO 字，长帧轮询 FIFO 占用量补数；API 等待整帧完成及最终低电平复位脉冲后返回。`timeout` 使用毫秒，`HAL_MAX_DELAY` 表示不限时。使用期间缓冲区必须有效，且不得被其他上下文修改。当前未实现 DMA 或 LEDC IRQ 发送。
+
+FIFO 溢出、缺数、发送超时和复位失败通过 `ErrorCode` 区分；失败后 CCU 复位中止发送，句柄进入 RESET，须重新调用 `HAL_LEDC_Init()` 后重试。长灯链补数需要足够的 CPU 响应时间；避免在传输期间执行长时间中断处理。默认 4 颗灯可全部预填，不依赖中途补数。
+
+PE2 的 AF2 由 MSP 配置，BSP 不在默认启动流程中开启 LEDC。灯效、复制命令及实板验证记录见 [WS2812 例程](../example/ledc/README.md)。
+
 ## 例程与验证
 
-见 [独立例程](../example/README.md) 和 [ILI9341 + XPT2046](../example/spi/ili9341/README.md)。默认应用不主动初始化 SPI、I²C 或 I²S。
+见 [独立例程](../example/README.md)、[ILI9341 + XPT2046](../example/spi/ili9341/README.md) 和 [WS2812](../example/ledc/README.md)。默认应用不主动初始化 SPI、I²C、I²S 或 LEDC。
 
 主机模型覆盖 SPI 跨 FIFO 收发、片选保持、I²C repeated START / NACK / 仲裁丢失、I²S FIFO / 声道映射、PLL 共享和错误恢复。显示模型另检查像素格式、裁剪、触摸解码与事务切换。模型不模拟真实时钟、电气和信号时序。
 
-寄存器依据：R328-S3 User Manual V1.4 的 CCU、I²S/PCM、TWI、SPI 和 GPIO 章节。
+LEDC 主机模型另覆盖时序字段、32 字 FIFO、最大帧、超时和异常恢复；4 颗 WS2812 已通过 FEL SRAM 实板灯效及串口运行验证。
+
+寄存器依据：R328-S3 User Manual V1.4 的 CCU、I²S/PCM、TWI、SPI、LEDC 和 GPIO 章节。
 
 GPIO 输入、输出和 EINT 中断接口见 [GPIO 例程说明](../example/gpio/README.md)。更多总线场景包含 SPI 环回、I²C 扫描 / 寄存器读取和 I²S 波形输出，见 [例程索引](../example/README.md)。

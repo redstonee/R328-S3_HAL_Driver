@@ -154,6 +154,7 @@ add_library(
     Drivers/R328_HAL_Driver/Src/r328_hal_spi.c
     Drivers/R328_HAL_Driver/Src/r328_hal_i2c.c
     Drivers/R328_HAL_Driver/Src/r328_hal_i2s.c
+    Drivers/R328_HAL_Driver/Src/r328_hal_ledc.c
     Drivers/R328_HAL_Driver/Src/r328_hal_bus_rcc.c
     Drivers/R328_HAL_Driver/Src/r328_hal_tim.c
     Drivers/R328_HAL_Driver/Src/r328_hal_gic.c
@@ -164,6 +165,7 @@ target_link_libraries(r328_hal PUBLIC r328_options)
 file(GLOB core_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/*.c")
 add_executable(
     firmware Core/Startup/startup_r328.S ${core_sources} BSP/Src/board.c BSP/Src/board_bus.c
+             BSP/Src/board_ledc.c
 )
 set_target_properties(
     firmware PROPERTIES SUFFIX ".elf" LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/r328_ram.ld

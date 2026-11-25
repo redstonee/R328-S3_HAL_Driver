@@ -38,6 +38,19 @@ target_compile_definitions(
 )
 target_compile_options(bus_register_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME bus_register_logic COMMAND bus_register_tests)
+add_executable(
+    ledc_register_tests
+    ledc_register_tests.c ${HAL_DIR}/Src/r328_hal_ledc.c ${HAL_DIR}/Src/r328_hal_bus_rcc.c
+    ${HAL_DIR}/Src/r328_hal_gpio.c ../Core/Src/r328_hal_msp.c ../BSP/Src/board_ledc.c
+)
+target_include_directories(
+    ledc_register_tests PRIVATE ${HAL_DIR}/Inc ../Drivers/Device/Include ../Core/Inc ../BSP/Inc
+)
+target_compile_definitions(
+    ledc_register_tests PRIVATE R328_HAL_HOST_TEST=1 _DEFAULT_SOURCE=1 R328_UART0_ROUTE_PH0_PH1=1
+)
+target_compile_options(ledc_register_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME ledc_register_logic COMMAND ledc_register_tests)
 add_executable(hal_timebase_tests hal_timebase_tests.c ${HAL_DIR}/Src/r328_hal.c)
 target_include_directories(
     hal_timebase_tests PRIVATE ${HAL_DIR}/Inc ../Drivers/Device/Include ../Core/Inc

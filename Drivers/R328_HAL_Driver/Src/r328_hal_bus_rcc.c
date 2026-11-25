@@ -33,6 +33,20 @@ static HAL_StatusTypeDef gate_reset(volatile uint32_t *bgr, int index, int reset
     R328_IRQ_Restore(irq);
     return HAL_OK;
 }
+HAL_StatusTypeDef HAL_RCC_LEDC_EnableClock(LEDC_TypeDef *instance)
+{
+    if (instance != LEDC)
+    {
+        return HAL_ERROR;
+    }
+    BUS_WRITE(RCC_LEDC_CLK, 1UL << 31); /* OSC24M, /1: timing cycles are fixed. */
+    R328_DSB();
+    return gate_reset(&RCC_LEDC_BGR, 0, 0);
+}
+HAL_StatusTypeDef HAL_RCC_LEDC_ForceReset(LEDC_TypeDef *instance)
+{
+    return gate_reset(&RCC_LEDC_BGR, instance == LEDC ? 0 : -1, 1);
+}
 HAL_StatusTypeDef HAL_RCC_SPI_EnableClock(SPI_TypeDef *instance)
 {
     int index = spi_index(instance);

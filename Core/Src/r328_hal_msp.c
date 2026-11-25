@@ -1,6 +1,30 @@
 #include "main.h"
 
 void HAL_MspInit(void) {}
+void HAL_LEDC_MspInit(LEDC_HandleTypeDef *handle)
+{
+    if (handle->Instance == LEDC)
+    {
+        /* PE2 AF2 -> WS2812 DIN. Preload low before selecting LEDC output. */
+        HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2, GPIO_PIN_RESET);
+        GPIO_InitTypeDef init = {.Pin = GPIO_PIN_2,
+                                 .Mode = GPIO_MODE_AF_PP,
+                                 .Pull = GPIO_NOPULL,
+                                 .Drive = GPIO_DRIVE_LEVEL1,
+                                 .Alternate = 2U};
+        if (HAL_GPIO_Init(GPIOE, &init) != HAL_OK)
+        {
+            Error_Handler();
+        }
+    }
+}
+void HAL_LEDC_MspDeInit(LEDC_HandleTypeDef *handle)
+{
+    if (handle->Instance == LEDC)
+    {
+        (void)HAL_GPIO_DeInit(GPIOE, GPIO_PIN_2);
+    }
+}
 void HAL_UART_MspInit(UART_HandleTypeDef *handle)
 {
     if (handle->Instance != UART0)

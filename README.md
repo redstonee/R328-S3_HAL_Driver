@@ -22,6 +22,8 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 
 默认 UART0 为 **PH0 TX / PH1 RX，115200 8N1**。程序回显串口输入，每秒输出 tick 和 Timer1 中断次数。`fel-run` 校验芯片 ID，将程序暂存于 `0x28000`，回读比较后通过 scratchpad 引导搬到 `0x20000` 执行，运行时使用完整 128 KiB SRAM；普通构建和 CTest 不访问 USB。详见 [FEL 下载说明](docs/fel-sram.md)。
 
+`Board_Init()` 将两颗普通 LED 初始化为熄灭：蓝色 LED2 为 PB6，红色 LED3 为 PB7，均高电平点亮。使用 `Board_LED_On(BOARD_LED_BLUE)`、`Board_LED_Off(BOARD_LED_RED)` 或 `Board_LED_Toggle(BOARD_LED_RED)` 独立控制；默认程序每秒翻转两颗灯。引脚复用作其他用途时可将 `BOARD_LED_ENABLE` 设为 0。
+
 应用源码统一放在 `Core/Src/`，头文件放在 `Core/Inc/`。运行例程时，将对应的 `main.c`、公共文件和设备文件复制到 `Core`，继续使用相同的内存 / 加载预设。复制步骤见 [例程索引](example/README.md)，显示与触摸见 [ILI9341 + XPT2046](example/spi/ili9341/README.md)。
 
 ## 功能
@@ -30,14 +32,15 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 | --- | --- |
 | 启动 | ARM 异常向量、VBAR、异常模式栈、数据初始化、异常现场记录 |
 | GPIO | 输入、推挽输出、复用、上下拉、驱动强度、端口读写、EINT 与中断回调 |
-| RCC | APB2、UART/SPI/TWI/I²S 时钟与复位、音频 PLL |
+| RCC | APB2、UART/SPI/TWI/I²S/LEDC 时钟与复位、音频 PLL |
 | UART | UART0–3 轮询收发、7/8 数据位、校验、超时与错误状态 |
 | SPI | SPI0/1 主机、模式 0–3、8 位轮询、软件或控制器片选 |
 | I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、寄存器读写、重复 START |
 | I²S / IIS | I2S0/1/2、立体声、16/24/32 位、主从模式、有限块轮询收发 |
+| LEDC | 硬件 WS2812 时序、1–1024 灯整帧轮询发送、GRB 格式、超时与错误恢复 |
 | TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |
 | 时基 | 64 位 ARM 架构计数器 CNTPCT，毫秒 tick 和延时，无周期 IRQ |
-| 例程 | 按模块细分的 20 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描和 I²S 波形 |
+| 例程 | 按模块细分的 21 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描、I²S 波形和 WS2812 灯效 |
 
 SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。DMA、UART 中断收发、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
 
@@ -129,7 +132,8 @@ HAL 仅支持 CPU0，句柄锁通过 CPU0 IRQ 临界区保护，不提供跨核�
 - [通过 xfel 烧写 W25Q64](docs/fel-nor.md)
 - [通过 xfel 烧写 MX35LF1GE4AB](docs/fel-nand.md)
 - [ARM 架构计数器时基](docs/timebase.md)
-- [SPI、I²C 和 I²S 接口](docs/peripherals.md)
+- [SPI、I²C、I²S 和 LEDC 接口](docs/peripherals.md)
+- [WS2812 灯效例程](example/ledc/README.md)
 - [独立例程](example/README.md)
 - [代码格式与开发检查](docs/development.md)
 
@@ -141,6 +145,6 @@ cmake --build build/host-tests
 ctest --test-dir build/host-tests --output-on-failure
 ```
 
-测试覆盖寄存器操作、GPIO EINT/GIC 分发、总线状态机、超时回绕、时基、显示/触摸协议、FEL 下载流程和 NOR 启动读取协议；交叉构建另检查入口、向量、RAM 边界、栈及未解析符号。模型测试不替代真实信号和设备验证。
+测试覆盖寄存器操作、GPIO EINT/GIC 分发、总线状态机、LEDC FIFO 与错误恢复、超时回绕、时基、显示/触摸协议、FEL 下载流程和 NOR 启动读取协议；交叉构建另检查入口、向量、RAM 边界、栈及未解析符号。模型测试不替代真实信号和设备验证。
 
 寄存器依据为 R328-S3 User Manual V1.4 和 Datasheet。原接口参考 [R328-S3_StdPeriphDriver](https://github.com/redstonee/R328-S3_StdPeriphDriver)，Cortex-A 异常与中断参考 [Arm 编程指南](https://documentation-service.arm.com/static/6893ad23e7f7ce6150e88d37) 和 [GIC 规范](https://documentation-service.arm.com/static/5f8ff196f86e16515cdbf969)。构建不在线下载这些资料或代码。

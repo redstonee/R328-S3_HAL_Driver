@@ -56,7 +56,8 @@ int main(void)
         if ((uint32_t)(now - last) >= 1000U)
         {
             last = now;
-            Board_LED_Toggle();
+            Board_LED_Toggle(BOARD_LED_BLUE);
+            Board_LED_Toggle(BOARD_LED_RED);
             (void)Board_ConsoleWrite("tick=");
             (void)Board_ConsoleWriteU32(now);
             (void)Board_ConsoleWrite(" timer1=");
