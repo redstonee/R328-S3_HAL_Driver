@@ -20,17 +20,24 @@
 
 UART0 默认 PH0/PH1。本例不读取 LCD ID 或 GRAM，LCD MISO 无需连接；共享 MISO 用于 XPT2046 DOUT。XPT2046 BUSY 未使用。
 
-## 构建与运行
+## 复制、构建与运行
+
+从工程根目录执行，先备份自己的 `Core/Src/main.c`；切换例程时先移出前一例程的附加文件。
 
 ```sh
-cmake --preset fel-spi-ili9341
-cmake --build --preset fel-spi-ili9341
-ctest --preset fel-spi-ili9341
+cp example/common/example.c Core/Src/
+cp example/common/example.h Core/Inc/
+cp example/spi/ili9341/main.c Core/Src/main.c
+cp example/spi/ili9341/ili9341.c example/spi/ili9341/xpt2046.c Core/Src/
+cp example/spi/ili9341/ili9341.h example/spi/ili9341/xpt2046.h Core/Inc/
+cmake --preset fel-debug
+cmake --build --preset fel-debug
+ctest --preset fel-debug
 # 进入 BROM FEL 后执行：
-cmake --build build/fel-spi-ili9341 --target fel-run
+cmake --build build/fel-debug --target fel-run
 ```
 
-xfel 不在 PATH 时，在配置命令中增加 `-DR328_XFEL=/absolute/path/to/xfel`。
+公共文件、切换与恢复说明见 [例程索引](../../README.md)。复制后修改 `Core` 内的设备文件即可。xfel 不在 PATH 时，在配置命令中增加 `-DR328_XFEL=/absolute/path/to/xfel`。
 
 ## 显示与共享总线
 

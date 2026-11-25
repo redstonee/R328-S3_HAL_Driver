@@ -55,6 +55,6 @@ cmake --build --preset fel-debug
 ctest --preset fel-debug
 ```
 
-修改独立例程时，替换为对应预设，例如 `fel-spi-ili9341`。启动、链接或优化相关修改还应检查 `fel-release`、`sram-debug` 和 `ddr-debug`。
+验证例程时，按 [复制说明](../example/README.md) 将源码和头文件放入 `Core/Src/`、`Core/Inc/`，继续使用同一内存 / 加载预设。启动、链接或优化相关修改还应检查 `fel-release`、`sram-debug` 和 `ddr-debug`。
 
 CTest 不下载程序或访问 USB。硬件下载仅由显式执行的 `fel-run` 目标触发。主机模型不验证实际电气、时钟频率或设备运行效果。

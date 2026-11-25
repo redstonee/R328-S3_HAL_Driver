@@ -1,16 +1,16 @@
 # GPIO
 
-| 例程 | 预设 | 内容 |
-| --- | --- | --- |
-| [output](output/main.c) | `fel-gpio-output` | 先预置输出值，再配置输出；循环置位、复位、翻转，每次回读 |
-| [input](input/main.c) | `fel-gpio-input` | 上拉输入，仅在电平稳定 20 ms 后报告变化 |
-| [interrupt](interrupt/main.c) | `fel-gpio-interrupt` | 双边沿中断、事件记录、前台消抖；按 q 释放中断 |
+| 例程 | 内容 |
+| --- | --- |
+| [output](output/main.c) | 先预置输出值，再配置输出；循环置位、复位、翻转，每次回读 |
+| [input](input/main.c) | 上拉输入，仅在电平稳定 20 ms 后报告变化 |
+| [interrupt](interrupt/main.c) | 双边沿中断、事件记录、前台消抖；按 q 释放中断 |
 
-构建和下载命令见 [例程索引](../README.md)。
+将所选 `main.c` 复制到 `Core/Src/`，将 `gpio_example.h` 复制到 `Core/Inc/`；公共文件和构建步骤见 [例程索引](../README.md)。
 
 ## 引脚与输入信号
 
-`gpio_example.h` 默认输出 PB6、输入 PB7。输出可接适当负载观察；输入可通过开关接地，上拉时释放为高电平。修改端口或引脚时同步检查复用冲突。
+复制后的 `Core/Inc/gpio_example.h` 默认输出 PB6、输入 PB7。输出可接适当负载观察；输入可通过开关接地，上拉时释放为高电平。修改端口或引脚时同步检查复用冲突。
 
 输入示例对候选电平进行稳定时间判断。中断示例使用真实 EINT，每个原始边沿均计数；前台等最后一个边沿后安静 20 ms 才报告当前电平。这是事件聚合，不把 raw edges 当作按键次数。
 

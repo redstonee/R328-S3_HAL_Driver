@@ -1,5 +1,5 @@
 #include "example.h"
-#include "../gpio_example.h"
+#include "gpio_example.h"
 
 int main(void)
 {

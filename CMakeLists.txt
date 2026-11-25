@@ -55,70 +55,6 @@ set(R328_XFEL
     xfel
     CACHE STRING "Path to the xfel host utility"
 )
-set(R328_APP_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/main.c"
-    CACHE FILEPATH "Application entry source"
-)
-set(R328_EXAMPLE
-    ""
-    CACHE STRING "Standalone example (empty uses R328_APP_SOURCE)"
-)
-set(r328_examples
-    gpio/output
-    gpio/input
-    gpio/interrupt
-    uart/echo
-    uart/line
-    tim/periodic
-    tim/oneshot
-    timebase/counter
-    timebase/timeout
-    spi/clocks
-    spi/loopback
-    spi/ili9341
-    i2c/probe
-    i2c/scan
-    i2c/memory
-    i2s/silence
-    i2s/tone
-    rcc/clocks
-    sram/memory
-)
-set_property(CACHE R328_EXAMPLE PROPERTY STRINGS "" ${r328_examples})
-
-# Retain existing R328_EXAMPLE values while grouping sources by peripheral.
-set(r328_example_gpio gpio/output)
-set(r328_example_uart uart/echo)
-set(r328_example_tim tim/periodic)
-set(r328_example_timebase timebase/counter)
-set(r328_example_spi spi/clocks)
-set(r328_example_i2c i2c/probe)
-set(r328_example_i2s i2s/silence)
-set(r328_example_ili9341 spi/ili9341)
-set(r328_example_aliases
-    gpio
-    uart
-    tim
-    timebase
-    spi
-    i2c
-    i2s
-    ili9341
-)
-set(app_sources "${R328_APP_SOURCE}")
-if(NOT R328_EXAMPLE STREQUAL "")
-    set(r328_example_path "${R328_EXAMPLE}")
-    if(R328_EXAMPLE IN_LIST r328_example_aliases)
-        set(r328_example_path "${r328_example_${R328_EXAMPLE}}")
-    endif()
-    if(NOT r328_example_path IN_LIST r328_examples)
-        message(FATAL_ERROR "Unknown R328_EXAMPLE: ${R328_EXAMPLE}; choose ${r328_examples}")
-    endif()
-    set(app_sources example/${r328_example_path}/main.c example/common/example.c)
-    if(r328_example_path STREQUAL "spi/ili9341")
-        list(APPEND app_sources example/spi/ili9341/ili9341.c example/spi/ili9341/xpt2046.c)
-    endif()
-endif()
 if(R328_MEMORY STREQUAL "SRAM")
     set(R328_RAM_ORIGIN 0x00020000)
     set(R328_RAM_LENGTH 0x00020000)
@@ -189,17 +125,11 @@ add_library(
 )
 target_link_libraries(r328_hal PUBLIC r328_options)
 
+# Pick up application sources copied into Core/Src, including device drivers.
+file(GLOB core_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/*.c")
 add_executable(
-    firmware
-    Core/Startup/startup_r328.S
-    Core/Src/system_r328.c
-    ${app_sources}
-    Core/Src/r328_it.c
-    Core/Src/r328_hal_msp.c
-    BSP/Src/board.c
-    BSP/Src/board_bus.c
+    firmware Core/Startup/startup_r328.S ${core_sources} BSP/Src/board.c BSP/Src/board_bus.c
 )
-target_include_directories(firmware PRIVATE example/common)
 set_target_properties(
     firmware PROPERTIES SUFFIX ".elf" LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/r328_ram.ld
 )

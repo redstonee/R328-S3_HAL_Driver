@@ -1,10 +1,10 @@
 # SPI
 
-| 例程 | 预设 | 内容 |
-| --- | --- | --- |
-| [clocks](clocks/main.c) | `fel-spi-clocks` | 1 MHz 测试数据，两个片选均保持无效 |
-| [loopback](loopback/main.c) | `fel-spi-loopback` | 131 字节跨 FIFO 全双工环回校验 |
-| [ili9341](ili9341/README.md) | `fel-spi-ili9341` | ILI9341 LCD 与 XPT2046 触摸共用 SPI1 |
+| 例程 | 内容 |
+| --- | --- |
+| [clocks](clocks/main.c) | 1 MHz 测试数据，两个片选均保持无效 |
+| [loopback](loopback/main.c) | 131 字节跨 FIFO 全双工环回校验 |
+| [ili9341](ili9341/README.md) | ILI9341 LCD 与 XPT2046 触摸共用 SPI1 |
 
 默认 SPI1 SCLK/MOSI/MISO 为 PH5/PH6/PH7、AF3；GPIO 片选为 PH4/PH8。构建命令见 [例程索引](../README.md)，HAL 限制见 [接口说明](../../docs/peripherals.md)。
 

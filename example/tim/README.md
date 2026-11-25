@@ -1,9 +1,9 @@
 # Timer
 
-| 例程 | 预设 | 内容 |
-| --- | --- | --- |
-| [periodic](periodic/main.c) | `fel-tim-periodic` | Timer1 每秒 IRQ，前台输出事件总数与 tick |
-| [oneshot](oneshot/main.c) | `fel-tim-oneshot` | 250 ms 单次 IRQ，按 s 再次启动 |
+| 例程 | 内容 |
+| --- | --- |
+| [periodic](periodic/main.c) | Timer1 每秒 IRQ，前台输出事件总数与 tick |
+| [oneshot](oneshot/main.c) | 250 ms 单次 IRQ，按 s 再次启动 |
 
 两个例程都使用 Timer1，IRQ 回调只更新事件计数。周期例程有持续中断源，可使用 WFI；单次例程到期后继续轮询串口，不依靠已经停止的定时器唤醒。
 

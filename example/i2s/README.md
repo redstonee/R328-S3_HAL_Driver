@@ -1,9 +1,9 @@
 # I²S / IIS
 
-| 例程 | 预设 | 内容 |
-| --- | --- | --- |
-| [silence](silence/main.c) | `fel-i2s-silence` | 一次发送 128 帧静音，然后串口回显 |
-| [tone](tone/main.c) | `fel-i2s-tone` | 按 p 发送左 1 kHz / 右 500 Hz 的 PCM16 三角波块 |
+| 例程 | 内容 |
+| --- | --- |
+| [silence](silence/main.c) | 一次发送 128 帧静音，然后串口回显 |
+| [tone](tone/main.c) | 按 p 发送左 1 kHz / 右 500 Hz 的 PCM16 三角波块 |
 
 默认 I²S0 主机发送，48 kHz、Philips I²S、32 位时隙、无 MCLK；LRCK/BCLK/DOUT0 为 PB2/PB3/PB4。采样数组使用 `uint32_t`，PCM16 放在低 16 位，按 L/R 交织；size 为声道采样数。
 

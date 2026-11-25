@@ -22,16 +22,7 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 
 默认 UART0 为 **PH0 TX / PH1 RX，115200 8N1**。程序回显串口输入，每秒输出 tick 和 Timer1 中断次数。`fel-run` 校验芯片 ID，将程序暂存于 `0x28000`，回读比较后通过 scratchpad 引导搬到 `0x20000` 执行，运行时使用完整 128 KiB SRAM；普通构建和 CTest 不访问 USB。详见 [FEL 下载说明](docs/fel-sram.md)。
 
-运行显示与触摸例程：
-
-```sh
-cmake --preset fel-spi-ili9341
-cmake --build --preset fel-spi-ili9341
-ctest --preset fel-spi-ili9341
-cmake --build build/fel-spi-ili9341 --target fel-run
-```
-
-其他例程及接线要求见 [example/README.md](example/README.md)。
+应用源码统一放在 `Core/Src/`，头文件放在 `Core/Inc/`。运行例程时，将对应的 `main.c`、公共文件和设备文件复制到 `Core`，继续使用相同的内存 / 加载预设。复制步骤见 [例程索引](example/README.md)，显示与触摸见 [ILI9341 + XPT2046](example/spi/ili9341/README.md)。
 
 ## 功能
 
@@ -52,6 +43,8 @@ DMA、UART 中断收发、PWM、USB 驱动、Flash 启动镜像、自主 DDR 初
 
 ## 构建配置
 
+预设按运行内存、加载方式与构建类型划分，所有预设均编译当前 `Core/Src/*.c`。添加或移除该目录中的 `.c` 后，构建会自动重新配置；应用头文件通过 `Core/Inc/` 查找。
+
 | 预设 | 入口 / 内存 | 加载条件 |
 | --- | --- | --- |
 | `fel-debug` / `fel-release` | `0x20000`，128 KiB | 复位后的 BROM FEL，scratchpad 引导搬运 |
@@ -59,7 +52,7 @@ DMA、UART 中断收发、PWM、USB 驱动、Flash 启动镜像、自主 DDR 初
 | `sram-debug` / `sram-release` | `0x20000`，128 KiB | 调试器或 loader 已准备 SRAM，且不占用应用区域 |
 | `ddr-debug` | `0x41000000`，默认 1 MiB | 外部 loader 已初始化 DDR |
 
-SRAM A1 总容量为 **128 KiB**，默认 FEL 配置全部用于代码、静态数据、空闲区和栈。应用 BIN 暂存上限为 **64 KiB**，BSS 不占用 BIN。可用 `fel-sram-memory` 运行空闲 SRAM 写入 / 回读测试；加载流程和限制见 [内存说明](docs/fel-sram.md#容量和限制)。
+SRAM A1 总容量为 **128 KiB**，默认 FEL 配置全部用于代码、静态数据、空闲区和栈。应用 BIN 暂存上限为 **64 KiB**，BSS 不占用 BIN。可复制 [SRAM 例程](example/sram/README.md) 运行空闲区写入 / 回读测试；加载流程和限制见 [内存说明](docs/fel-sram.md#容量和限制)。
 
 每个构建目录生成 `firmware.elf`、`firmware.bin`、`firmware.hex`、`firmware.map` 和 `compile_commands.json`。FEL 配置另生成 `firmware-fel.bin` 与描述地址、长度、SHA256 的 `firmware-fel.json`；FULL 配置还生成配套的 `firmware-fel-loader.bin`。
 
@@ -77,8 +70,6 @@ cmake --build build/custom
 | 选项 | 用途 |
 | --- | --- |
 | `ARM_TOOLCHAIN_PREFIX` | 工具链前缀，默认 `arm-none-eabi`，可指定完整路径前缀 |
-| `R328_EXAMPLE` | 选择独立例程；空值使用 `R328_APP_SOURCE` |
-| `R328_APP_SOURCE` | 自定义应用入口，默认 `Core/Src/main.c` |
 | `R328_UART0_ROUTE` | `PH0_PH1`（默认，AF3）或 `PB8_PB9`（AF5） |
 | `R328_GIC_SECURITY` | `SECURE`（默认）或 `NONSECURE`，须匹配实际运行状态 |
 | `R328_DDR_ORIGIN` / `R328_DDR_LENGTH` | DDR 应用地址和范围 |

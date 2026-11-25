@@ -1,5 +1,5 @@
 #include "example.h"
-#include "../gpio_example.h"
+#include "gpio_example.h"
 
 static volatile uint32_t edges;
 static volatile uint32_t last_edge;

@@ -12,7 +12,7 @@ ctest --preset fel-debug
 cmake --build build/fel-debug --target fel-run
 ```
 
-需要 [xfel](https://github.com/xboot/xfel)。不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。发布构建使用 `fel-release`，独立例程见 [例程目录](../example/README.md)。
+需要 [xfel](https://github.com/xboot/xfel)。不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。发布构建使用 `fel-release`，例程按 [复制说明](../example/README.md) 放入 `Core` 后，沿用相同预设。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -75,16 +75,21 @@ ctest --preset fel-direct
 cmake --build build/fel-direct --target fel-run
 ```
 
-其他例程也可在配置时增加 `-DR328_FEL_SRAM_PROFILE=DIRECT`。FULL 和 DIRECT 的 ELF、BIN、清单不可混用，切换配置后应重新构建。
+运行其他例程时，也可在配置阶段增加 `-DR328_FEL_SRAM_PROFILE=DIRECT`。FULL 和 DIRECT 的 ELF、BIN、清单不可混用，切换配置后应重新构建。
 
 ## SRAM 测试
 
+先备份自己的 `Core/Src/main.c`，并按 [例程复制说明](../example/README.md) 移出前一例程的附加文件，再从工程根目录执行：
+
 ```sh
-cmake --preset fel-sram-memory
-cmake --build --preset fel-sram-memory
-ctest --preset fel-sram-memory
+cp example/common/example.c Core/Src/
+cp example/common/example.h Core/Inc/
+cp example/sram/memory/main.c Core/Src/main.c
+cmake --preset fel-debug
+cmake --build --preset fel-debug
+ctest --preset fel-debug
 # 进入 BROM FEL 后：
-cmake --build build/fel-sram-memory --target fel-run
+cmake --build build/fel-debug --target fel-run
 ```
 
 [测试程序](../example/sram/memory/main.c) 对 `__static_end__` 到 `__stack_bottom__` 的全部空闲内存执行地址相关模式和反相模式两轮写入 / 回读，打印范围、字节数及 `SRAM PASS`，随后每秒输出 tick。遇到错误时打印首个失败地址和期望 / 实际值。

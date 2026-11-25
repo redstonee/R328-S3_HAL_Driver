@@ -1,9 +1,9 @@
 # UART
 
-| 例程 | 预设 | 内容 |
-| --- | --- | --- |
-| [echo](echo/main.c) | `fel-uart-echo` | 轮询读取单字节并回显 |
-| [line](line/main.c) | `fel-uart-line` | 有界行缓冲、退格、换行识别、溢出与空闲超时 |
+| 例程 | 内容 |
+| --- | --- |
+| [echo](echo/main.c) | 轮询读取单字节并回显 |
+| [line](line/main.c) | 有界行缓冲、退格、换行识别、溢出与空闲超时 |
 
 默认 UART0 PH0 TX / PH1 RX、115200 8N1；通过 `R328_UART0_ROUTE` 选择路由。构建步骤见 [例程索引](../README.md)。
 

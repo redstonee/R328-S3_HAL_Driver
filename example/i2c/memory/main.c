@@ -29,7 +29,7 @@ int main(void)
 {
     Example_Init("I2C1 / register read with repeated START");
     Example_RequireOK("I2C init=", Board_I2C1_Init(100000U));
-    (void)Board_ConsoleWrite("Set memory/config.h for the target. Press r to read registers.\r\n");
+    (void)Board_ConsoleWrite("Set config.h for the target. Press r to read registers.\r\n");
     for (;;)
     {
         uint8_t byte;
