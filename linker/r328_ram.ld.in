@@ -1,0 +1,79 @@
+OUTPUT_FORMAT("elf32-littlearm")
+OUTPUT_ARCH(arm)
+ENTRY(_start)
+
+MEMORY
+{
+    RAM (rwx) : ORIGIN = @R328_RAM_ORIGIN@, LENGTH = @R328_RAM_LENGTH@
+}
+
+PHDRS
+{
+    code PT_LOAD FLAGS(5);
+    data PT_LOAD FLAGS(6);
+}
+
+SECTIONS
+{
+    __image_start__ = ORIGIN(RAM);
+    .vectors ORIGIN(RAM) : ALIGN(32)
+    {
+        KEEP(*(.vectors))
+    } > RAM :code
+    .text : ALIGN(4)
+    {
+        *(.text.startup*)
+        *(.text*)
+        *(.rodata*)
+        . = ALIGN(4);
+    } > RAM :code
+    .ARM.extab :
+    {
+        *(.ARM.extab*)
+    } > RAM :code
+    .ARM.exidx :
+    {
+        __exidx_start = .;
+        *(.ARM.exidx*)
+        __exidx_end = .;
+    } > RAM :code
+    .data : ALIGN(4)
+    {
+        __data_start__ = .;
+        *(.data*)
+        . = ALIGN(4);
+        __data_end__ = .;
+    } > RAM :data
+    __data_load__ = LOADADDR(.data);
+    __image_end__ = .;
+    .bss (NOLOAD) : ALIGN(8)
+    {
+        __bss_start__ = .;
+        *(.bss*)
+        *(COMMON)
+        . = ALIGN(8);
+        __bss_end__ = .;
+    } > RAM :data
+    .noinit (NOLOAD) : ALIGN(8)
+    {
+        *(.noinit*)
+        . = ALIGN(8);
+    } > RAM :data
+    __static_end__ = .;
+    /* No allocator: leave all free RAM between static storage and stacks. */
+    __stack_top__ = ORIGIN(RAM) + LENGTH(RAM);
+    __svc_stack_top__ = __stack_top__;
+    __irq_stack_top__ = __svc_stack_top__ - 8192;
+    __fiq_stack_top__ = __irq_stack_top__ - 2048;
+    __abt_stack_top__ = __fiq_stack_top__ - 512;
+    __und_stack_top__ = __abt_stack_top__ - 512;
+    __stack_bottom__ = __und_stack_top__ - 512;
+    /DISCARD/ :
+    {
+        *(.comment)
+        *(.note*)
+    }
+    ASSERT((ORIGIN(RAM) & 31) == 0, "RAM origin must be vector aligned")
+    ASSERT((LENGTH(RAM) & 7) == 0, "RAM length must preserve stack alignment")
+    ASSERT(__static_end__ <= __stack_bottom__, "Firmware overlaps reserved stacks")
+}

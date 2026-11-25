@@ -1,0 +1,130 @@
+# R328-S3 HAL 裸机框架
+
+面向 Allwinner R328-S3（双核 ARM Cortex-A7）的 C11 + CMake 裸机工程，采用接近 STM32 HAL 的 `Handle / Init / MspInit / Callback` 接口。当前仅使用 CPU0，不依赖操作系统、newlib 或动态内存。
+
+## 快速开始
+
+需要 CMake ≥ 3.21、Ninja、GNU Arm Embedded 工具链（`arm-none-eabi-gcc`、binutils、libgcc）和 Python 3。通过 USB FEL 下载时另需 [xfel](https://github.com/xboot/xfel)。
+
+```sh
+cmake --preset fel-debug
+cmake --build --preset fel-debug
+ctest --preset fel-debug
+```
+
+进入 BROM FEL 后执行：
+
+```sh
+cmake --build build/fel-debug --target fel-run
+```
+
+xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。
+
+默认 UART0 为 **PH0 TX / PH1 RX，115200 8N1**。程序回显串口输入，每秒输出 tick 和 Timer1 中断次数。`fel-run` 校验芯片 ID，将程序暂存于 `0x28000`，回读比较后通过 scratchpad 引导搬到 `0x20000` 执行，运行时使用完整 128 KiB SRAM；普通构建和 CTest 不访问 USB。详见 [FEL 下载说明](docs/fel-sram.md)。
+
+运行显示与触摸例程：
+
+```sh
+cmake --preset fel-spi-ili9341
+cmake --build --preset fel-spi-ili9341
+ctest --preset fel-spi-ili9341
+cmake --build build/fel-spi-ili9341 --target fel-run
+```
+
+其他例程及接线要求见 [example/README.md](example/README.md)。
+
+## 功能
+
+| 模块 | 支持范围 |
+| --- | --- |
+| 启动 | ARM 异常向量、VBAR、异常模式栈、数据初始化、异常现场记录 |
+| GPIO | 输入、推挽输出、复用、上下拉、驱动强度、端口读写、EINT 与中断回调 |
+| RCC | APB2、UART/SPI/TWI/I²S 时钟与复位、音频 PLL |
+| UART | UART0–3 轮询收发、7/8 数据位、校验、超时与错误状态 |
+| SPI | SPI0/1 主机、模式 0–3、8 位轮询、软件或控制器片选 |
+| I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、寄存器读写、重复 START |
+| I²S / IIS | I2S0/1/2、立体声、16/24/32 位、主从模式、有限块轮询收发 |
+| TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |
+| 时基 | 64 位 ARM 架构计数器 CNTPCT，毫秒 tick 和延时，无周期 IRQ |
+| 例程 | 按模块细分的 19 个场景，含 SRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描和 I²S 波形 |
+
+DMA、UART 中断收发、PWM、USB 驱动、Flash 启动镜像、自主 DDR 初始化、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
+
+## 构建配置
+
+| 预设 | 入口 / 内存 | 加载条件 |
+| --- | --- | --- |
+| `fel-debug` / `fel-release` | `0x20000`，128 KiB | 复位后的 BROM FEL，scratchpad 引导搬运 |
+| `fel-direct` | `0x28000`，32 KiB | 原先的保守 FEL 布局，供回退 |
+| `sram-debug` / `sram-release` | `0x20000`，128 KiB | 调试器或 loader 已准备 SRAM，且不占用应用区域 |
+| `ddr-debug` | `0x41000000`，默认 1 MiB | 外部 loader 已初始化 DDR |
+
+SRAM A1 总容量为 **128 KiB**，默认 FEL 配置全部用于代码、静态数据、空闲区和栈。应用 BIN 暂存上限为 **64 KiB**，BSS 不占用 BIN。可用 `fel-sram-memory` 运行空闲 SRAM 写入 / 回读测试；加载流程和限制见 [内存说明](docs/fel-sram.md#容量和限制)。
+
+每个构建目录生成 `firmware.elf`、`firmware.bin`、`firmware.hex`、`firmware.map` 和 `compile_commands.json`。FEL 配置另生成 `firmware-fel.bin` 与描述地址、长度、SHA256 的 `firmware-fel.json`；FULL 配置还生成配套的 `firmware-fel-loader.bin`。
+
+自定义构建：
+
+```sh
+cmake -S . -B build/custom -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DCMAKE_BUILD_TYPE=Debug -DR328_MEMORY=SRAM
+cmake --build build/custom
+```
+
+常用选项：
+
+| 选项 | 用途 |
+| --- | --- |
+| `ARM_TOOLCHAIN_PREFIX` | 工具链前缀，默认 `arm-none-eabi`，可指定完整路径前缀 |
+| `R328_EXAMPLE` | 选择独立例程；空值使用 `R328_APP_SOURCE` |
+| `R328_APP_SOURCE` | 自定义应用入口，默认 `Core/Src/main.c` |
+| `R328_UART0_ROUTE` | `PH0_PH1`（默认，AF3）或 `PB8_PB9`（AF5） |
+| `R328_GIC_SECURITY` | `SECURE`（默认）或 `NONSECURE`，须匹配实际运行状态 |
+| `R328_DDR_ORIGIN` / `R328_DDR_LENGTH` | DDR 应用地址和范围 |
+| `R328_FEL_SRAM_PROFILE` | `FULL`（默认，128 KiB，搬运）或 `DIRECT`（32 KiB，直接执行） |
+| `R328_XFEL` | xfel 可执行文件路径 |
+| `BUILD_TESTING` | 是否启用构建产物检查，默认开启 |
+
+普通 SRAM / DDR 的 BIN 需要按链接地址加载，不是独立的 Flash 冷启动镜像。
+
+## 目录与移植
+
+```text
+Core/                       默认应用、MSP、异常入口、启动汇编
+BSP/                        控制台、LED 和例程总线配置
+Drivers/Device/Include/     寄存器、IRQ ID、Cortex-A7 原语
+Drivers/R328_HAL_Driver/    HAL 公共接口和实现
+example/                   各外设独立例程及显示、触摸测试
+cmake/                     GNU Arm 工具链
+linker/                    RAM 链接脚本模板
+tests/                     主机模型测试和 ARM 产物检查
+tools/                     FEL 打包、校验和下载脚本
+docs/                      加载、时基、外设和开发说明
+```
+
+初始化流程为 `Reset_Handler → SystemInit → main → HAL_Init → SystemClock_Config → Board_Init`。`HAL_Init()` 初始化 GIC 和计数器时基后开放 CPU IRQ；`SystemInit()` 保留加载方设置的 PLL、DDR、LDO 和 SRAM 状态。
+
+接线配置集中在 `Core/Src/r328_hal_msp.c`、`BSP/` 和具体设备例程中。迁移时修改这些配置，并保证外设实例、复用功能、片选和控制引脚一致。UART1–3、其他 SPI/TWI/I²S 实例的 MSP 需自行补充。
+
+HAL 仅支持 CPU0，句柄锁通过 CPU0 IRQ 临界区保护，不提供跨核同步。句柄应清零初始化并在使用期间保持有效。轮询 API 使用毫秒超时；阻塞操作建议放在前台。`HAL_GetTick()` 约每 49.7 天回绕，超时比较使用无符号差值。
+
+## 文档与验证
+
+- [FEL 下载与 SRAM 布局](docs/fel-sram.md)
+- [ARM 架构计数器时基](docs/timebase.md)
+- [SPI、I²C 和 I²S 接口](docs/peripherals.md)
+- [独立例程](example/README.md)
+- [代码格式与开发检查](docs/development.md)
+
+主机测试使用独立构建目录：
+
+```sh
+cmake -S tests -B build/host-tests -G Ninja
+cmake --build build/host-tests
+ctest --test-dir build/host-tests --output-on-failure
+```
+
+测试覆盖寄存器操作、GPIO EINT/GIC 分发、总线状态机、超时回绕、时基、显示/触摸协议和 FEL 下载流程；交叉构建另检查入口、向量、RAM 边界、栈及未解析符号。模型测试不替代真实信号和设备验证。
+
+寄存器依据为 R328-S3 User Manual V1.4 和 Datasheet。原接口参考 [R328-S3_StdPeriphDriver](https://github.com/redstonee/R328-S3_StdPeriphDriver)，Cortex-A 异常与中断参考 [Arm 编程指南](https://documentation-service.arm.com/static/6893ad23e7f7ce6150e88d37) 和 [GIC 规范](https://documentation-service.arm.com/static/5f8ff196f86e16515cdbf969)。构建不在线下载这些资料或代码。

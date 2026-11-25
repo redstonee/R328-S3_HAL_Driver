@@ -1,0 +1,626 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "sram-debug",
+      "displayName": "R328-S3 SRAM Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "R328_MEMORY": "SRAM",
+        "R328_UART0_ROUTE": "PH0_PH1",
+        "R328_EXAMPLE": "",
+        "R328_FEL_IMAGE": "OFF",
+        "R328_GIC_SECURITY": "SECURE"
+      }
+    },
+    {
+      "name": "fel-debug",
+      "inherits": "sram-debug",
+      "displayName": "R328-S3 BROM FEL SRAM / UART0 PH0-PH1",
+      "cacheVariables": {
+        "R328_FEL_IMAGE": "ON",
+        "R328_GIC_SECURITY": "SECURE",
+        "R328_FEL_SRAM_PROFILE": "FULL"
+      }
+    },
+    {
+      "name": "fel-release",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 BROM FEL SRAM Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+    {
+      "name": "ddr-debug",
+      "inherits": "sram-debug",
+      "displayName": "R328-S3 initialized DDR Debug",
+      "cacheVariables": {
+        "R328_MEMORY": "DDR"
+      }
+    },
+    {
+      "name": "sram-release",
+      "inherits": "sram-debug",
+      "displayName": "R328-S3 SRAM Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+    {
+      "name": "fel-gpio-output",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL gpio/output",
+      "cacheVariables": {
+        "R328_EXAMPLE": "gpio/output"
+      }
+    },
+    {
+      "name": "fel-gpio-input",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL gpio/input",
+      "cacheVariables": {
+        "R328_EXAMPLE": "gpio/input"
+      }
+    },
+    {
+      "name": "fel-gpio-interrupt",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL gpio/interrupt",
+      "cacheVariables": {
+        "R328_EXAMPLE": "gpio/interrupt"
+      }
+    },
+    {
+      "name": "fel-uart-echo",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL uart/echo",
+      "cacheVariables": {
+        "R328_EXAMPLE": "uart/echo"
+      }
+    },
+    {
+      "name": "fel-uart-line",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL uart/line",
+      "cacheVariables": {
+        "R328_EXAMPLE": "uart/line"
+      }
+    },
+    {
+      "name": "fel-tim-periodic",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL tim/periodic",
+      "cacheVariables": {
+        "R328_EXAMPLE": "tim/periodic"
+      }
+    },
+    {
+      "name": "fel-tim-oneshot",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL tim/oneshot",
+      "cacheVariables": {
+        "R328_EXAMPLE": "tim/oneshot"
+      }
+    },
+    {
+      "name": "fel-timebase-counter",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL timebase/counter",
+      "cacheVariables": {
+        "R328_EXAMPLE": "timebase/counter"
+      }
+    },
+    {
+      "name": "fel-timebase-timeout",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL timebase/timeout",
+      "cacheVariables": {
+        "R328_EXAMPLE": "timebase/timeout"
+      }
+    },
+    {
+      "name": "fel-spi-clocks",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL spi/clocks",
+      "cacheVariables": {
+        "R328_EXAMPLE": "spi/clocks"
+      }
+    },
+    {
+      "name": "fel-spi-loopback",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL spi/loopback",
+      "cacheVariables": {
+        "R328_EXAMPLE": "spi/loopback"
+      }
+    },
+    {
+      "name": "fel-spi-ili9341",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL spi/ili9341",
+      "cacheVariables": {
+        "R328_EXAMPLE": "spi/ili9341"
+      }
+    },
+    {
+      "name": "fel-i2c-probe",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL i2c/probe",
+      "cacheVariables": {
+        "R328_EXAMPLE": "i2c/probe"
+      }
+    },
+    {
+      "name": "fel-i2c-scan",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL i2c/scan",
+      "cacheVariables": {
+        "R328_EXAMPLE": "i2c/scan"
+      }
+    },
+    {
+      "name": "fel-i2c-memory",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL i2c/memory",
+      "cacheVariables": {
+        "R328_EXAMPLE": "i2c/memory"
+      }
+    },
+    {
+      "name": "fel-i2s-silence",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL i2s/silence",
+      "cacheVariables": {
+        "R328_EXAMPLE": "i2s/silence"
+      }
+    },
+    {
+      "name": "fel-i2s-tone",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL i2s/tone",
+      "cacheVariables": {
+        "R328_EXAMPLE": "i2s/tone"
+      }
+    },
+    {
+      "name": "fel-rcc-clocks",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL rcc/clocks",
+      "cacheVariables": {
+        "R328_EXAMPLE": "rcc/clocks"
+      }
+    },
+    {
+      "name": "fel-gpio",
+      "inherits": "fel-gpio-output",
+      "displayName": "Alias: fel-gpio-output"
+    },
+    {
+      "name": "fel-uart",
+      "inherits": "fel-uart-echo",
+      "displayName": "Alias: fel-uart-echo"
+    },
+    {
+      "name": "fel-tim",
+      "inherits": "fel-tim-periodic",
+      "displayName": "Alias: fel-tim-periodic"
+    },
+    {
+      "name": "fel-timebase",
+      "inherits": "fel-timebase-counter",
+      "displayName": "Alias: fel-timebase-counter"
+    },
+    {
+      "name": "fel-spi",
+      "inherits": "fel-spi-clocks",
+      "displayName": "Alias: fel-spi-clocks"
+    },
+    {
+      "name": "fel-i2c",
+      "inherits": "fel-i2c-probe",
+      "displayName": "Alias: fel-i2c-probe"
+    },
+    {
+      "name": "fel-i2s",
+      "inherits": "fel-i2s-silence",
+      "displayName": "Alias: fel-i2s-silence"
+    },
+    {
+      "name": "fel-ili9341",
+      "inherits": "fel-spi-ili9341",
+      "displayName": "Alias: fel-spi-ili9341"
+    },
+    {
+      "name": "fel-direct",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 conservative 32 KiB FEL",
+      "cacheVariables": {
+        "R328_FEL_SRAM_PROFILE": "DIRECT"
+      }
+    },
+    {
+      "name": "fel-sram-memory",
+      "inherits": "fel-debug",
+      "displayName": "R328-S3 FEL SRAM memory test",
+      "cacheVariables": {
+        "R328_EXAMPLE": "sram/memory"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "sram-debug",
+      "configurePreset": "sram-debug"
+    },
+    {
+      "name": "fel-debug",
+      "configurePreset": "fel-debug"
+    },
+    {
+      "name": "fel-release",
+      "configurePreset": "fel-release"
+    },
+    {
+      "name": "ddr-debug",
+      "configurePreset": "ddr-debug"
+    },
+    {
+      "name": "sram-release",
+      "configurePreset": "sram-release"
+    },
+    {
+      "name": "fel-gpio-output",
+      "configurePreset": "fel-gpio-output"
+    },
+    {
+      "name": "fel-gpio-input",
+      "configurePreset": "fel-gpio-input"
+    },
+    {
+      "name": "fel-gpio-interrupt",
+      "configurePreset": "fel-gpio-interrupt"
+    },
+    {
+      "name": "fel-uart-echo",
+      "configurePreset": "fel-uart-echo"
+    },
+    {
+      "name": "fel-uart-line",
+      "configurePreset": "fel-uart-line"
+    },
+    {
+      "name": "fel-tim-periodic",
+      "configurePreset": "fel-tim-periodic"
+    },
+    {
+      "name": "fel-tim-oneshot",
+      "configurePreset": "fel-tim-oneshot"
+    },
+    {
+      "name": "fel-timebase-counter",
+      "configurePreset": "fel-timebase-counter"
+    },
+    {
+      "name": "fel-timebase-timeout",
+      "configurePreset": "fel-timebase-timeout"
+    },
+    {
+      "name": "fel-spi-clocks",
+      "configurePreset": "fel-spi-clocks"
+    },
+    {
+      "name": "fel-spi-loopback",
+      "configurePreset": "fel-spi-loopback"
+    },
+    {
+      "name": "fel-spi-ili9341",
+      "configurePreset": "fel-spi-ili9341"
+    },
+    {
+      "name": "fel-i2c-probe",
+      "configurePreset": "fel-i2c-probe"
+    },
+    {
+      "name": "fel-i2c-scan",
+      "configurePreset": "fel-i2c-scan"
+    },
+    {
+      "name": "fel-i2c-memory",
+      "configurePreset": "fel-i2c-memory"
+    },
+    {
+      "name": "fel-i2s-silence",
+      "configurePreset": "fel-i2s-silence"
+    },
+    {
+      "name": "fel-i2s-tone",
+      "configurePreset": "fel-i2s-tone"
+    },
+    {
+      "name": "fel-rcc-clocks",
+      "configurePreset": "fel-rcc-clocks"
+    },
+    {
+      "name": "fel-gpio",
+      "configurePreset": "fel-gpio"
+    },
+    {
+      "name": "fel-uart",
+      "configurePreset": "fel-uart"
+    },
+    {
+      "name": "fel-tim",
+      "configurePreset": "fel-tim"
+    },
+    {
+      "name": "fel-timebase",
+      "configurePreset": "fel-timebase"
+    },
+    {
+      "name": "fel-spi",
+      "configurePreset": "fel-spi"
+    },
+    {
+      "name": "fel-i2c",
+      "configurePreset": "fel-i2c"
+    },
+    {
+      "name": "fel-i2s",
+      "configurePreset": "fel-i2s"
+    },
+    {
+      "name": "fel-ili9341",
+      "configurePreset": "fel-ili9341"
+    },
+    {
+      "name": "fel-direct",
+      "configurePreset": "fel-direct"
+    },
+    {
+      "name": "fel-sram-memory",
+      "configurePreset": "fel-sram-memory"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "sram-debug",
+      "configurePreset": "sram-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-debug",
+      "configurePreset": "fel-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-release",
+      "configurePreset": "fel-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ddr-debug",
+      "configurePreset": "ddr-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "sram-release",
+      "configurePreset": "sram-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-gpio-output",
+      "configurePreset": "fel-gpio-output",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-gpio-input",
+      "configurePreset": "fel-gpio-input",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-gpio-interrupt",
+      "configurePreset": "fel-gpio-interrupt",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-uart-echo",
+      "configurePreset": "fel-uart-echo",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-uart-line",
+      "configurePreset": "fel-uart-line",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-tim-periodic",
+      "configurePreset": "fel-tim-periodic",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-tim-oneshot",
+      "configurePreset": "fel-tim-oneshot",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-timebase-counter",
+      "configurePreset": "fel-timebase-counter",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-timebase-timeout",
+      "configurePreset": "fel-timebase-timeout",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-spi-clocks",
+      "configurePreset": "fel-spi-clocks",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-spi-loopback",
+      "configurePreset": "fel-spi-loopback",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-spi-ili9341",
+      "configurePreset": "fel-spi-ili9341",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2c-probe",
+      "configurePreset": "fel-i2c-probe",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2c-scan",
+      "configurePreset": "fel-i2c-scan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2c-memory",
+      "configurePreset": "fel-i2c-memory",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2s-silence",
+      "configurePreset": "fel-i2s-silence",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2s-tone",
+      "configurePreset": "fel-i2s-tone",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-rcc-clocks",
+      "configurePreset": "fel-rcc-clocks",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-gpio",
+      "configurePreset": "fel-gpio",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-uart",
+      "configurePreset": "fel-uart",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-tim",
+      "configurePreset": "fel-tim",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-timebase",
+      "configurePreset": "fel-timebase",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-spi",
+      "configurePreset": "fel-spi",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2c",
+      "configurePreset": "fel-i2c",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-i2s",
+      "configurePreset": "fel-i2s",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-ili9341",
+      "configurePreset": "fel-ili9341",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-direct",
+      "configurePreset": "fel-direct",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-sram-memory",
+      "configurePreset": "fel-sram-memory",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+#ifndef GPIO_EXAMPLE_CONFIG_H
+#define GPIO_EXAMPLE_CONFIG_H
+
+/* Change these example connections together; input supports PB/PE/PG/PH EINT. */
+#define EXAMPLE_GPIO_OUTPUT_PORT GPIOB
+#define EXAMPLE_GPIO_OUTPUT_PIN GPIO_PIN_6
+#define EXAMPLE_GPIO_INPUT_PORT GPIOB
+#define EXAMPLE_GPIO_INPUT_PIN GPIO_PIN_7
+#define EXAMPLE_GPIO_DEBOUNCE_MS 20U
+#endif
