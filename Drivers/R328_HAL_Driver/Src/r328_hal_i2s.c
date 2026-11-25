@@ -1,6 +1,19 @@
 #include "r328_hal_bus_private.h"
 #define I2S_FIFO_RESET (3UL << 24)
 #define I2S_ERRORS 0x66U
+#define I2S_TX_FIFO_WORDS 128U
+#define I2S_RX_FIFO_WORDS 64U
+
+static void fill_tx(I2S_HandleTypeDef *handle, const uint32_t *tx, uint32_t size, uint32_t space)
+{
+    uint32_t count = handle->TxXferCount < space ? handle->TxXferCount : space;
+    const uint32_t *next = tx + size - handle->TxXferCount;
+    for (uint32_t i = 0U; i < count; ++i)
+    {
+        BUS_WRITE(handle->Instance->TXFIFO, next[i]);
+    }
+    handle->TxXferCount -= count;
+}
 static int valid_instance(I2S_TypeDef *instance)
 {
     return instance == I2S0 || instance == I2S1 || instance == I2S2;
@@ -154,10 +167,16 @@ static HAL_StatusTypeDef transfer(I2S_HandleTypeDef *handle, const uint32_t *tx,
         goto done;
     }
     /* Prefill before enabling TX to avoid a startup underrun. */
-    while (handle->TxXferCount != 0U && (BUS_READ(i2s->FSTA) & (1UL << 28)) != 0U)
+    uint32_t space = (BUS_READ(i2s->FSTA) >> 16) & 0xFFU;
+    if (space > I2S_TX_FIFO_WORDS)
     {
-        BUS_WRITE(i2s->TXFIFO, tx[size - handle->TxXferCount]);
-        --handle->TxXferCount;
+        handle->ErrorCode = HAL_I2S_ERROR_FIFO;
+        status = HAL_ERROR;
+        goto done;
+    }
+    if (tx != NULL)
+    {
+        fill_tx(handle, tx, size, space);
     }
     BUS_WRITE(i2s->CTL, control | 1U | (tx != NULL ? 0x104U : 0U) | (rx != NULL ? 2U : 0U));
     uint32_t start = HAL_GetTick();
@@ -179,15 +198,27 @@ static HAL_StatusTypeDef transfer(I2S_HandleTypeDef *handle, const uint32_t *tx,
             goto done;
         }
         uint32_t fifo = BUS_READ(i2s->FSTA);
-        if (handle->RxXferCount != 0U && (fifo & (1U << 8)) != 0U)
+        space = (fifo >> 16) & 0xFFU;
+        uint32_t available = fifo & 0x7FU;
+        if (space > I2S_TX_FIFO_WORDS || available > I2S_RX_FIFO_WORDS)
+        {
+            handle->ErrorCode = HAL_I2S_ERROR_FIFO;
+            status = HAL_ERROR;
+            goto done;
+        }
+        /* Service the occupancy snapshot in bursts. A per-sample timebase
+         * read/divide can starve TX at the BROM's low CPU clock. The CPU is
+         * the only FIFO producer/consumer, so these counts are conservative
+         * while the serializer continues to run. */
+        if (handle->TxXferCount != 0U)
+        {
+            fill_tx(handle, tx, size, space);
+        }
+        uint32_t count = handle->RxXferCount < available ? handle->RxXferCount : available;
+        for (uint32_t i = 0U; i < count; ++i)
         {
             rx[size - handle->RxXferCount] = BUS_READ(i2s->RXFIFO);
             --handle->RxXferCount;
-        }
-        if (handle->TxXferCount != 0U && (fifo & (1UL << 28)) != 0U)
-        {
-            BUS_WRITE(i2s->TXFIFO, tx[size - handle->TxXferCount]);
-            --handle->TxXferCount;
         }
         if (bus_expired(start, timeout))
         {
@@ -199,7 +230,7 @@ static HAL_StatusTypeDef transfer(I2S_HandleTypeDef *handle, const uint32_t *tx,
     {
         /* FSTA free-space == 128 means FIFO empty. TXCNT counts host writes,
          * not wire completion, so it must not be used to decide completion. */
-        while (((BUS_READ(i2s->FSTA) >> 16) & 0xFFU) != 128U)
+        while (((BUS_READ(i2s->FSTA) >> 16) & 0xFFU) != I2S_TX_FIFO_WORDS)
         {
             if (bus_expired(start, timeout))
             {

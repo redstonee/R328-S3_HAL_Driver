@@ -8,8 +8,24 @@
 #include <sys/mman.h>
 
 static uint32_t tick;
+static uint32_t audio_queued, audio_written, audio_read, audio_log[1024];
+static uint32_t audio_tick_words;
 uint32_t HAL_GetTick(void)
 {
+    /* Hardware keeps shifting while the CPU reads/divides the timebase.
+     * Model this separately from MMIO polling to expose slow FIFO service. */
+    if ((I2S0->CTL & 5U) == 5U && audio_tick_words != 0U)
+    {
+        if (audio_queued < audio_tick_words)
+        {
+            I2S0->ISTA |= HAL_I2S_ERROR_UDR;
+            audio_queued = 0U;
+        }
+        else
+        {
+            audio_queued -= audio_tick_words;
+        }
+    }
     return tick++;
 }
 void Error_Handler(void)
@@ -26,7 +42,6 @@ static uint32_t spi_tx_count, spi_rx_count, spi_rx_pos, spi_log_count, spi_burst
 static uint32_t twi_active, twi_address, twi_read, twi_starts, twi_stops, twi_rx_count;
 static uint8_t twi_log[64], twi_ack[64];
 static uint32_t twi_log_count;
-static uint32_t audio_queued, audio_written, audio_read, audio_log[1024];
 
 static void map_region(uintptr_t address, size_t size)
 {
@@ -333,8 +348,12 @@ static void test_i2s(void)
     assert(HAL_RCC_AudioPLL_Config(RCC_AUDIO_FAMILY_48K) == HAL_BUSY);
     RCC_I2S_CLK(1U) = 0U;
     assert(Board_I2S0_Init(48000U, 16U) == HAL_OK);
-    assert(HAL_RCC_GetI2SClockFreq(I2S0) == 294912000U);
-    assert((I2S0->CLKD & 0xF0U) == 0xC0U); /* /96 -> BCLK 3.072MHz -> 48k stereo/32. */
+    assert(HAL_RCC_GetI2SClockFreq(I2S0) == 24576000U);
+    assert((I2S0->CLKD & 0xF0U) == 0x50U); /* /8 -> BCLK 3.072MHz -> 48k stereo/32. */
+    uint32_t pll = RCC_PLL_AUDIO_CTRL;
+    RCC_PLL_AUDIO_CTRL ^= 1U << 16; /* A different post-divider is not the same recipe. */
+    assert(HAL_RCC_GetAudioPLL4XFreq() == 0U);
+    RCC_PLL_AUDIO_CTRL = pll;
     assert(I2S0->FMT0 == 0x1F37U && I2S0->RXCHMAP[3] == 0x100U);
     assert(I2S0->TXCHSEL[0] == 0x110003U && I2S0->TXCHMAP[0][1] == 0x10U);
     assert((GPIOB->CFG[0] & 0xFFFF00U) == 0x45500U); /* PB5 untouched. */
@@ -348,6 +367,36 @@ static void test_i2s(void)
     assert(audio_written == 260U && audio_queued == 0U && I2S0->TXCNT == 260U);
     assert(memcmp(tx, audio_log, sizeof(tx)) == 0);
     assert((I2S0->CTL & 7U) == 0U && hi2s0.Lock == HAL_UNLOCKED);
+    /* Reproduce the original tone test's 960-sample blocks. Per-sample timebase
+     * checks cannot keep up, while a FIFO-sized burst has sufficient slack. */
+    uint32_t tone[960];
+    for (uint32_t i = 0U; i < 960U; ++i)
+    {
+        tone[i] = i ^ 0x1234U;
+    }
+    audio_tick_words = 8U;
+    for (uint32_t block = 0U; block < 20U; ++block)
+    {
+        audio_written = 0U;
+        assert(HAL_I2S_Transmit(&hi2s0, tone, 960U, 1000U) == HAL_OK);
+        assert(audio_written == 960U && audio_queued == 0U);
+        assert(memcmp(tone, audio_log, sizeof(tone)) == 0);
+    }
+    audio_tick_words = 0U;
+    const uint32_t tx_errors[] = {HAL_I2S_ERROR_UDR, 1U << 5};
+    for (uint32_t i = 0U; i < sizeof(tx_errors) / sizeof(tx_errors[0]); ++i)
+    {
+        audio_written = 0U;
+        audio_error = tx_errors[i];
+        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U, 1000U) == HAL_ERROR);
+        assert(hi2s0.ErrorCode == tx_errors[i] && hi2s0.TxXferCount != 0U);
+        assert(hi2s0.State == HAL_I2S_STATE_RESET && hi2s0.Lock == HAL_UNLOCKED);
+        audio_error = 0U;
+        assert(HAL_I2S_Init(&hi2s0) == HAL_OK);
+        audio_written = 0U;
+        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U, 1000U) == HAL_OK);
+        assert(memcmp(tx, audio_log, sizeof(tx)) == 0);
+    }
     assert(HAL_I2S_Transmit(&hi2s0, tx, 1U, 100U) == HAL_ERROR);
     assert(HAL_I2S_Receive(&hi2s0, rx, 2U, 100U) == HAL_ERROR);
     hi2s0.Init.Mode = I2S_MODE_MASTER_TX_RX;
@@ -367,15 +416,23 @@ static void test_i2s(void)
     assert(hi2s0.Lock == HAL_UNLOCKED && hi2s0.State == HAL_I2S_STATE_RESET);
     audio_stall = 0;
     assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
-    assert(Board_I2S0_Init(16000U, 16U) ==
-           HAL_ERROR); /* No exact divider with this clock recipe. */
+    assert(Board_I2S0_Init(12345U, 16U) == HAL_ERROR);
+    const uint32_t rates[] = {8000U,   12000U, 16000U, 24000U, 32000U, 48000U, 96000U,
+                              192000U, 11025U, 22050U, 44100U, 88200U, 176400U};
+    const uint32_t codes[] = {10U, 9U, 8U, 7U, 6U, 5U, 3U, 2U, 9U, 7U, 5U, 3U, 2U};
+    for (uint32_t i = 0U; i < sizeof(rates) / sizeof(rates[0]); ++i)
+    {
+        assert(Board_I2S0_Init(rates[i], 16U) == HAL_OK);
+        assert(((I2S0->CLKD >> 4) & 0xFU) == codes[i]);
+        assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
+    }
     assert(Board_I2S0_Init(44100U, 24U) == HAL_OK);
-    assert(HAL_RCC_GetI2SClockFreq(I2S0) == 270950400U);
-    assert(I2S0->FMT0 == 0x1F57U && (I2S0->CLKD & 0xF0U) == 0xC0U);
+    assert(HAL_RCC_GetI2SClockFreq(I2S0) == 22579200U);
+    assert(I2S0->FMT0 == 0x1F57U && (I2S0->CLKD & 0xF0U) == 0x50U);
     hi2s0.Init.Standard = I2S_STANDARD_MSB;
     hi2s0.Init.MCLKOutput = I2S_MCLKOUTPUT_ENABLE;
     assert(HAL_I2S_Init(&hi2s0) == HAL_OK);
-    assert(I2S0->TXCHSEL[0] == 0x10003U && I2S0->CLKD == 0x1C8U);
+    assert(I2S0->TXCHSEL[0] == 0x10003U && I2S0->CLKD == 0x152U);
     assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
 }
 int main(void)

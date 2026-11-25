@@ -59,13 +59,14 @@ HAL_StatusTypeDef Board_I2S0_Init(uint32_t sample_rate, uint32_t sample_bits)
         return HAL_ERROR;
     }
     uint32_t family;
-    if (sample_rate == 22050U || sample_rate == 44100U || sample_rate == 88200U ||
-        sample_rate == 176400U)
+    if (sample_rate == 11025U || sample_rate == 22050U || sample_rate == 44100U ||
+        sample_rate == 88200U || sample_rate == 176400U)
     {
         family = RCC_AUDIO_FAMILY_44K1;
     }
-    else if (sample_rate == 24000U || sample_rate == 48000U || sample_rate == 96000U ||
-             sample_rate == 192000U)
+    else if (sample_rate == 8000U || sample_rate == 12000U || sample_rate == 16000U ||
+             sample_rate == 24000U || sample_rate == 32000U || sample_rate == 48000U ||
+             sample_rate == 96000U || sample_rate == 192000U)
     {
         family = RCC_AUDIO_FAMILY_48K;
     }

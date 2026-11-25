@@ -15,6 +15,8 @@ HAL_StatusTypeDef HAL_RCC_I2C_ForceReset(I2C_TypeDef *instance);
 #define RCC_AUDIO_FAMILY_44K1 1U
 /* Explicit shared PLL configuration; refuses retuning while audio clocks are enabled. */
 HAL_StatusTypeDef HAL_RCC_AudioPLL_Config(uint32_t family);
+/* Actual R328 I2S parent rate for the recognized recipes: 24.576/22.5792 MHz.
+ * The 4X name follows the CCU mux label, not a multiplier to apply again. */
 uint32_t HAL_RCC_GetAudioPLL4XFreq(void);
 HAL_StatusTypeDef HAL_RCC_I2S_EnableClock(I2S_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_I2S_ForceReset(I2S_TypeDef *instance);

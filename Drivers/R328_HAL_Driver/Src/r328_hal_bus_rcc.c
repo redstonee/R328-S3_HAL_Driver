@@ -75,20 +75,22 @@ HAL_StatusTypeDef HAL_RCC_I2C_ForceReset(I2C_TypeDef *instance)
 uint32_t HAL_RCC_GetAudioPLL4XFreq(void)
 {
     uint32_t control = BUS_READ(RCC_PLL_AUDIO_CTRL);
-    /* Recognize only the two documented register recipes from manual 5.1.4.
-     * 4X tap = Input*N/(M1+1)/2 (3.3.5.5), NOT the post-divided 1X tap. */
-    if ((control & 0xF900FFFFU) != 0xB9001701U && (control & 0xF900FFFFU) != 0xB9001501U)
+    /* CCU names this parent PLL_AUDIO(4X), but the manual 5.1.4 recipes
+     * supply 24.576/22.5792 MHz to I2S on R328. Using the un-post-divided
+     * formula from 3.3.5.5 makes BCLK/LRCK twelve times too slow. Include
+     * P=11 in the recognized recipe; it is not a don't-care field. */
+    if ((control & 0xF93FFFFFU) != 0xB90B1701U && (control & 0xF93FFFFFU) != 0xB90B1501U)
     {
         return 0U;
     }
     uint32_t pattern = BUS_READ(RCC_PLL_AUDIO_PAT0);
     if ((control & 0xFFFFU) == 0x1701U && pattern == 0xC00126E9U)
     {
-        return 294912000U;
+        return 24576000U;
     }
     if ((control & 0xFFFFU) == 0x1501U && pattern == 0xC001288DU)
     {
-        return 270950400U;
+        return 22579200U;
     }
     return 0U;
 }
@@ -98,7 +100,7 @@ HAL_StatusTypeDef HAL_RCC_AudioPLL_Config(uint32_t family)
     {
         return HAL_ERROR;
     }
-    uint32_t target = family == RCC_AUDIO_FAMILY_48K ? 294912000U : 270950400U;
+    uint32_t target = family == RCC_AUDIO_FAMILY_48K ? 24576000U : 22579200U;
     if (HAL_RCC_GetAudioPLL4XFreq() == target)
     {
         return HAL_OK;

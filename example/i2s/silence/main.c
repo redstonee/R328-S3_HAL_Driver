@@ -12,7 +12,14 @@ int main(void)
     }
     status = HAL_I2S_Transmit(&hi2s0, silence, 256U, 100U);
     Example_Report("I2S0 silence=", status);
-    (void)Board_ConsoleWrite(
-        "Inspect LRCK/BCLK/DOUT; finite block complete. UART echo active.\r\n");
+    if (status == HAL_OK)
+    {
+        (void)Board_ConsoleWrite("Inspect LRCK/BCLK/DOUT; finite block complete.\r\n");
+    }
+    else
+    {
+        Example_PrintValue("ErrorCode=", hi2s0.ErrorCode);
+    }
+    (void)Board_ConsoleWrite("UART echo active.\r\n");
     Example_Idle();
 }
