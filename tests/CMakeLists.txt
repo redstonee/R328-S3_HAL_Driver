@@ -73,3 +73,28 @@ target_include_directories(
 target_compile_definitions(gpio_exti_tests PRIVATE R328_HAL_HOST_TEST=1 _DEFAULT_SOURCE=1)
 target_compile_options(gpio_exti_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME gpio_exti COMMAND gpio_exti_tests)
+
+add_test(NAME nand_image_format COMMAND ${Python3_EXECUTABLE}
+                                        ${CMAKE_CURRENT_SOURCE_DIR}/test_nand_image.py
+)
+
+add_executable(nor_boot_tests nor_boot_tests.c)
+target_compile_options(nor_boot_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME nor_boot_reader COMMAND nor_boot_tests)
+add_test(NAME nor_image_format COMMAND ${Python3_EXECUTABLE}
+                                       ${CMAKE_CURRENT_SOURCE_DIR}/test_nor_image.py
+)
+
+add_executable(fel_nor_tests fel_nor_tests.c)
+target_compile_options(fel_nor_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME fel_nor_protocol COMMAND fel_nor_tests)
+add_test(NAME fel_nor_host COMMAND ${Python3_EXECUTABLE}
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/test_fel_nor.py
+)
+
+add_executable(fel_nand_tests fel_nand_tests.c)
+target_compile_options(fel_nand_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME fel_nand_protocol COMMAND fel_nand_tests)
+add_test(NAME fel_nand_host COMMAND ${Python3_EXECUTABLE}
+                                    ${CMAKE_CURRENT_SOURCE_DIR}/test_fel_nand.py
+)

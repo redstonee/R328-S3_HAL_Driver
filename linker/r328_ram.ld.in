@@ -20,6 +20,10 @@ SECTIONS
     {
         KEEP(*(.vectors))
     } > RAM :code
+    .boot_header :
+    {
+        KEEP(*(.boot_header))
+    } > RAM :code
     .text : ALIGN(4)
     {
         *(.text.startup*)

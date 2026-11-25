@@ -1,0 +1,19 @@
+{
+  "format": "r328-spinor-direct-v1",
+  "model": "W25Q64",
+  "capacity": 8388608,
+  "sector_size": 4096,
+  "page_size": 256,
+  "package_offset": 65536,
+  "spi_clock_hz": 12000000,
+  "read_opcode": 3,
+  "address_bytes": 3,
+  "boot0_sha256": "7d67bfbfd681b5fe65a5491bba7c357d33fed362a8f37470e06a6f928c8e38ad",
+  "ddr": {
+    "base": "0x40000000",
+    "size": 134217728,
+    "capacity_measured": false,
+    "parameters_offset": "0x38",
+    "parameters_sha256": "d2e1bebdebc27306dee8d02045ab27306147c1f534956bb0ed7769ecc2bfc48a"
+  }
+}

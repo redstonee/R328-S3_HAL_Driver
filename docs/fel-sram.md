@@ -108,4 +108,6 @@ cmake --build build/fel-debug --target fel-run
 | BIN 大小检查失败 | FULL 的文件内容上限为 64 KiB；大缓冲区可放 BSS，但仍须满足运行容量 |
 | 链接失败 | 静态数据和预留异常栈是否超过运行窗口 |
 
+给 W25Q64 烧写 Flash 使用独立的可返回 SRAM 程序，见 [xfel NOR 烧写](fel-nor.md)；不要用本文的 FULL 应用启动入口替代烧写程序。
+
 系统时基使用 24 MHz CNTPCT，见 [时基说明](timebase.md)。修改下载地址不能代替重新链接。

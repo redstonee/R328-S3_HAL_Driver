@@ -22,6 +22,7 @@
 | [I²S](i2s/README.md) | [silence](i2s/silence/main.c) | 48 kHz 有限静音块 |
 | I²S | [tone](i2s/tone/main.c) | PCM16 左 1 kHz / 右 500 Hz 三角波数据块 |
 | [SRAM](sram/README.md) | [memory](sram/memory/main.c) | 完整 SRAM 配置下的空闲区写入 / 回读 |
+| [DRAM](dram/README.md) | [memory](dram/memory/main.c) | DDR 空闲区 walking 1/0、固定模式与地址 / 反相地址校验 |
 | [RCC](rcc/README.md) | [clocks](rcc/clocks/main.c) | 查询 CPU、APB2、架构计数器与音频时钟 |
 
 ## 复制与构建
@@ -60,7 +61,11 @@ cmake --build build/fel-debug --target fel-run
 | `fel-debug` / `fel-release` | BROM FEL 加载，128 KiB SRAM 运行 |
 | `fel-direct` | 原 32 KiB SRAM FEL 回退配置 |
 | `sram-debug` / `sram-release` | 调试器或外部 loader 加载到 SRAM |
-| `ddr-debug` | 外部 loader 已初始化 DDR |
+| `ddr-debug` | 外部 loader 已初始化并释放 128 MiB DDR |
+| `nand-debug` / `nand-release` | SPI NAND 冷启动，boot0 初始化 DDR 后直接执行应用 |
+| `nor-debug` / `nor-release` | W25Q64 SPI NOR 冷启动，初始化 DDR 后直接执行应用 |
+
+NAND 构建使用工程内的必要 prebuilt，命令及页布局见 [NAND 与 DDR 说明](../docs/nand-image.md)。W25Q64 使用相同应用源码，NOR 连接和线性镜像见 [SPI NOR 说明](../docs/nor-image.md)，通过 USB FEL 烧写见 [xfel NOR 烧写](../docs/fel-nor.md)。
 
 xfel 不在 PATH 时，配置阶段增加 `-DR328_XFEL=/absolute/path/to/xfel`。产物位于 `build/<预设名>/`；默认 FEL 暂存于 `0x28000`，通过引导搬到 `0x20000` 执行，运行总容量为 128 KiB，应用 BIN 上限为 64 KiB。普通构建和 CTest 不访问设备，详见 [FEL 说明](../docs/fel-sram.md)。
 

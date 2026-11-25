@@ -17,7 +17,9 @@
         "R328_MEMORY": "SRAM",
         "R328_UART0_ROUTE": "PH0_PH1",
         "R328_FEL_IMAGE": "OFF",
-        "R328_GIC_SECURITY": "SECURE"
+        "R328_GIC_SECURITY": "SECURE",
+        "R328_NAND_IMAGE": "OFF",
+        "R328_NOR_IMAGE": "OFF"
       }
     },
     {
@@ -43,7 +45,9 @@
       "inherits": "sram-debug",
       "displayName": "R328-S3 loader to initialized DDR, Debug",
       "cacheVariables": {
-        "R328_MEMORY": "DDR"
+        "R328_MEMORY": "DDR",
+        "R328_DDR_ORIGIN": "0x40000000",
+        "R328_DDR_LENGTH": "0x08000000"
       }
     },
     {
@@ -60,6 +64,41 @@
       "displayName": "R328-S3 FEL to SRAM (32 KiB fallback)",
       "cacheVariables": {
         "R328_FEL_SRAM_PROFILE": "DIRECT"
+      }
+    },
+    {
+      "name": "nand-debug",
+      "inherits": "ddr-debug",
+      "displayName": "R328-S3 SPI NAND to DDR, Debug",
+      "cacheVariables": {
+        "R328_NAND_IMAGE": "ON",
+        "R328_GIC_SECURITY": "SECURE",
+        "R328_DDR_ORIGIN": "0x40000000",
+        "R328_DDR_LENGTH": "0x08000000"
+      }
+    },
+    {
+      "name": "nand-release",
+      "inherits": "nand-debug",
+      "displayName": "R328-S3 SPI NAND to DDR, Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+    {
+      "name": "nor-debug",
+      "inherits": "ddr-debug",
+      "displayName": "R328-S3 W25Q64 SPI NOR to DDR, Debug",
+      "cacheVariables": {
+        "R328_NOR_IMAGE": "ON"
+      }
+    },
+    {
+      "name": "nor-release",
+      "inherits": "nor-debug",
+      "displayName": "R328-S3 W25Q64 SPI NOR to DDR, Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
       }
     }
   ],
@@ -87,6 +126,22 @@
     {
       "name": "fel-direct",
       "configurePreset": "fel-direct"
+    },
+    {
+      "name": "nand-debug",
+      "configurePreset": "nand-debug"
+    },
+    {
+      "name": "nand-release",
+      "configurePreset": "nand-release"
+    },
+    {
+      "name": "nor-debug",
+      "configurePreset": "nor-debug"
+    },
+    {
+      "name": "nor-release",
+      "configurePreset": "nor-release"
     }
   ],
   "testPresets": [
@@ -128,6 +183,34 @@
     {
       "name": "fel-direct",
       "configurePreset": "fel-direct",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "nand-debug",
+      "configurePreset": "nand-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "nand-release",
+      "configurePreset": "nand-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "nor-debug",
+      "configurePreset": "nor-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "nor-release",
+      "configurePreset": "nor-release",
       "output": {
         "outputOnFailure": true
       }

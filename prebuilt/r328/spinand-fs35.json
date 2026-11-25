@@ -1,0 +1,49 @@
+{
+  "format": "r328-spinand-direct-v1",
+  "model": "FS35ND04G-S2Y2",
+  "page_size": 2048,
+  "oob_size": 64,
+  "pages_per_block": 64,
+  "blocks_per_die": 4096,
+  "chip_id": [
+    205,
+    236,
+    17,
+    255,
+    255,
+    255,
+    255,
+    255
+  ],
+  "boot0_data_per_page": 2048,
+  "boot0_blocks": [
+    0,
+    2,
+    4,
+    6
+  ],
+  "package_first_block": 8,
+  "package_last_block": 31,
+  "spi_operation_options": 0,
+  "spi_clock_mhz": 30,
+  "boot0_sha256": "7d67bfbfd681b5fe65a5491bba7c357d33fed362a8f37470e06a6f928c8e38ad",
+  "provenance": {
+    "source_image_sha256": "ab89ca3410579d572dd1c220e39cad5f5b8427b4ba2733550577b158880d7f5c",
+    "source_item": "boot0_nand.fex",
+    "source_offset": "0x2b000",
+    "length": 32768,
+    "vendor_commit": "553a5eb",
+    "license": "Vendor binary; original terms apply. Not covered by the framework source license."
+  },
+  "ddr": {
+    "base": "0x40000000",
+    "size": 134217728,
+    "capacity_measured": false,
+    "parameters_offset": "0x38",
+    "parameters_sha256": "d2e1bebdebc27306dee8d02045ab27306147c1f534956bb0ed7769ecc2bfc48a"
+  },
+  "references": [
+    "https://atta.szlcsc.com/upload/public/pdf/source/20221101/AF3526963A3B9DA134285C521F8A7BFE.pdf",
+    "https://lists.infradead.org/pipermail/linux-mtd/2021-August/087740.html"
+  ]
+}
