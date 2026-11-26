@@ -1,4 +1,80 @@
-#include "example.h"
+#include "main.h"
+
+#define UART_TIMEOUT_MS 100U
+static UART_HandleTypeDef huart0;
+volatile uint32_t g_application_error;
+
+void Error_Handler(void)
+{
+    g_application_error = 1U;
+    R328_IRQ_Disable();
+    for (;;)
+    {
+        R328_WFI();
+    }
+}
+void SystemClock_Config(void)
+{
+    if (HAL_RCC_APB2_Config24M() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemCoreClockUpdate();
+}
+static void require_ok(const char *label, HAL_StatusTypeDef status)
+{
+    if (status != HAL_OK)
+    {
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        Error_Handler();
+    }
+}
+static void app_init(const char *banner)
+{
+    if (HAL_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemClock_Config();
+    /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
+     * The framework itself does not reserve any UART or initialize these pins. */
+    GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
+                                  .Mode = GPIO_MODE_AF_PP,
+                                  .Pull = GPIO_PULLUP,
+                                  .Drive = GPIO_DRIVE_LEVEL1,
+                                  .Alternate = 3U};
+    if (HAL_GPIO_Init(GPIOH, &uart_pins) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    huart0.Instance = UART0;
+    huart0.Init =
+        (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
+    require_ok("UART init=", HAL_UART_Init(&huart0));
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
+                               UART_TIMEOUT_MS);
+}
+
+static void uart_poll(void)
+{
+    uint8_t byte;
+    if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK)
+    {
+        (void)HAL_UART_Transmit(&huart0, &byte, 1U, UART_TIMEOUT_MS);
+    }
+}
+
+static void idle(void) __attribute__((noreturn));
+static void idle(void)
+{
+    /* Polling RX needs the CPU; the architecture counter does not wake WFI. */
+    for (;;)
+    {
+        uart_poll();
+    }
+}
 
 #define DRAM_BASE 0x40000000U
 #define DRAM_END 0x48000000U
@@ -10,10 +86,10 @@ extern uint32_t __stack_top__;
 
 static void PrintHex(const char *label, uint32_t value)
 {
-    (void)Board_ConsoleWrite(label);
-    (void)Board_ConsoleWrite("0x");
-    Example_PrintHex(value);
-    (void)Board_ConsoleWrite("\r\n");
+    (void)HAL_UART_PrintString(&huart0, label, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "0x", UART_TIMEOUT_MS);
+    HAL_UART_PrintHex(&huart0, value, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
 }
 
 static void Fail(uintptr_t address, uint32_t expected, uint32_t actual)
@@ -21,7 +97,7 @@ static void Fail(uintptr_t address, uint32_t expected, uint32_t actual)
     PrintHex("DRAM FAIL address=", (uint32_t)address);
     PrintHex("expected=", expected);
     PrintHex("actual=", actual);
-    Example_Idle();
+    idle();
 }
 
 static void TestDataBus(uintptr_t address)
@@ -42,7 +118,7 @@ static void TestDataBus(uintptr_t address)
             }
         }
     }
-    (void)Board_ConsoleWrite("data bus PASS (walking 1/0)\r\n");
+    (void)HAL_UART_PrintString(&huart0, "data bus PASS (walking 1/0)\r\n", UART_TIMEOUT_MS);
 }
 
 static void TestRange(uintptr_t begin, uintptr_t end, uint32_t pattern, uint32_t use_address)
@@ -78,42 +154,46 @@ static void TestMemory(void)
     if (origin < DRAM_BASE || origin >= DRAM_END || begin < origin || end > top || top > DRAM_END ||
         begin >= end)
     {
-        (void)Board_ConsoleWrite("DRAM SKIP: use a DDR build with initialized DRAM\r\n");
-        Example_Idle();
+        (void)HAL_UART_PrintString(&huart0, "DRAM SKIP: use a DDR build with initialized DRAM\r\n",
+                                   UART_TIMEOUT_MS);
+        idle();
     }
     if ((control & 5U) != 0U)
     {
-        (void)Board_ConsoleWrite("DRAM SKIP: MMU and D-cache must be disabled\r\n");
-        Example_Idle();
+        (void)HAL_UART_PrintString(&huart0, "DRAM SKIP: MMU and D-cache must be disabled\r\n",
+                                   UART_TIMEOUT_MS);
+        idle();
     }
 
     PrintHex("begin=", (uint32_t)begin);
     PrintHex("end (exclusive)=", (uint32_t)end);
-    Example_PrintValue("tested bytes=", (uint32_t)(end - begin));
+    HAL_UART_PrintValue(&huart0, "tested bytes=", (uint32_t)(end - begin), UART_TIMEOUT_MS);
     uint32_t start = HAL_GetTick();
     TestDataBus(begin);
     static const uint32_t patterns[] = {0U, 0xFFFFFFFFU, 0x55555555U, 0xAAAAAAAAU, 0U, 0xFFFFFFFFU};
     static const char *const names[] = {"zero", "ones", "55", "AA", "address", "~address"};
     for (uint32_t pass = 0U; pass < sizeof(patterns) / sizeof(patterns[0]); ++pass)
     {
-        (void)Board_ConsoleWrite("testing ");
-        (void)Board_ConsoleWrite(names[pass]);
-        (void)Board_ConsoleWrite("...\r\n");
+        (void)HAL_UART_PrintString(&huart0, "testing ", UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(&huart0, names[pass], UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(&huart0, "...\r\n", UART_TIMEOUT_MS);
         uint32_t pass_start = HAL_GetTick();
         TestRange(begin, end, patterns[pass], pass >= 4U);
-        Example_PrintValue("PASS ms=", (uint32_t)(HAL_GetTick() - pass_start));
+        HAL_UART_PrintValue(&huart0, "PASS ms=", (uint32_t)(HAL_GetTick() - pass_start),
+                            UART_TIMEOUT_MS);
     }
-    (void)Board_ConsoleWrite("DRAM PASS (free region, 6 patterns + data bus)\r\n");
-    Example_PrintValue("total ms=", (uint32_t)(HAL_GetTick() - start));
+    (void)HAL_UART_PrintString(&huart0, "DRAM PASS (free region, 6 patterns + data bus)\r\n",
+                               UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "total ms=", (uint32_t)(HAL_GetTick() - start), UART_TIMEOUT_MS);
 }
 
 int main(void)
 {
-    Example_Init("DRAM free-memory test");
+    app_init("DRAM free-memory test");
     TestMemory();
     for (;;)
     {
         HAL_Delay(1000U);
-        Example_PrintValue("tick=", HAL_GetTick());
+        HAL_UART_PrintValue(&huart0, "tick=", HAL_GetTick(), UART_TIMEOUT_MS);
     }
 }

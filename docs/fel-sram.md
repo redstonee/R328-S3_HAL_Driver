@@ -1,6 +1,6 @@
 # FEL 下载到 SRAM
 
-`fel-debug` / `fel-release` 默认将 **128 KiB SRAM A1（`0x20000–0x3FFFF`）全部交给应用**，无需初始化 DDR。运行入口为 `0x20000`，栈顶为 `0x40000`。UART0 默认为 **PH0 TX / PH1 RX，AF3，115200 8N1**。
+`fel-debug` / `fel-release` 默认将 **128 KiB SRAM A1（`0x20000–0x3FFFF`）全部交给应用**，无需初始化 DDR。运行入口为 `0x20000`，栈顶为 `0x40000`。默认应用不配置 UART 或输出日志；交互例程自行配置 UART0 **PH0 TX / PH1 RX，AF3，115200 8N1**。
 
 ## 构建与运行
 
@@ -82,8 +82,6 @@ cmake --build build/fel-direct --target fel-run
 先备份自己的 `Core/Src/main.c`，并按 [例程复制说明](../example/README.md) 移出前一例程的附加文件，再从工程根目录执行：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/sram/memory/main.c Core/Src/main.c
 cmake --preset fel-debug
 cmake --build --preset fel-debug
@@ -104,7 +102,7 @@ cmake --build build/fel-debug --target fel-run
 | --- | --- |
 | 版本查询超时 | 是否处于 BROM FEL、USB 连接与设备访问权限；重新进入 FEL 后重试 |
 | 下载或回读失败 | 产物是否来自同一构建、暂存地址与 scratchpad 是否匹配 |
-| 执行后串口无输出 | UART 路由、115200 8N1、入口条件、计数器权限和异常记录 |
+| 例程执行后串口无输出 | 默认模板本来无输出；先确认应用已配置 UART，再检查引脚、波特率、入口条件和异常记录 |
 | BIN 大小检查失败 | FULL 的文件内容上限为 64 KiB；大缓冲区可放 BSS，但仍须满足运行容量 |
 | 链接失败 | 静态数据和预留异常栈是否超过运行窗口 |
 

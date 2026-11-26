@@ -1,6 +1,6 @@
 #ifndef EXAMPLE_XPT2046_H
 #define EXAMPLE_XPT2046_H
-#include "board.h"
+#include "r328_hal.h"
 
 #define XPT2046_SPI_HZ 2000000U
 

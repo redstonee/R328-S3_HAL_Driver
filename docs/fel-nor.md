@@ -26,7 +26,7 @@ cmake --build build/nor-debug --target fel-probe
 cmake --build build/nor-debug --target fel-flash
 ```
 
-**`fel-flash` 擦除整颗 8 MiB W25Q64，覆盖原有内容。** 它使用当前构建的 `firmware-nor.bin`，完成后逐字节回读校验整片，包括填 `0xFF` 的空白区。显示 `Full NOR readback PASS` 后，松开 FEL 键并复位 / 重新上电，验证冷启动 UART 输出。程序不会自行退出 FEL 或启动应用。
+**`fel-flash` 擦除整颗 8 MiB W25Q64，覆盖原有内容。** 它使用当前构建的 `firmware-nor.bin`，完成后逐字节回读校验整片，包括填 `0xFF` 的空白区。显示 `Full NOR readback PASS` 后，松开 FEL 键并复位 / 重新上电，验证 boot0 日志及应用行为（默认模板无 UART 输出）。程序不会自行退出 FEL 或启动应用。
 
 只回读校验当前镜像，不擦除、不编程：
 

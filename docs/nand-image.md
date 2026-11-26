@@ -40,7 +40,7 @@ boot0 先将 TOC1 读到 `0x42E00000`，然后将应用复制到 `0x40000000`。
 
 [Flash 启动头部](../Core/Startup/flash_header.S) 在八个异常向量之后保留元数据，使 BIN 的 `+0x2C` 为加载地址 `0x40000000`，真正的代码从 `+0x200` 之后开始。头部也在 ELF 内，ELF 与 BIN 保持一致；不能直接打包未启用 Flash 启动头部的普通 DDR 产物。
 
-TOC1 条目名使用 `freertos`，这是该版本 boot0 内已有的**直接应用分发标识**，不表示工程依赖 FreeRTOS。反汇编确认它将应用地址存入独立入口变量，跳过 U-Boot 头修改、monitor/OP-TEE 交接分支。应用维持 Secure SVC，`nand-*` 使用 `SECURE` GIC Group 0，UART0 默认 PH0/PH1、115200 8N1。
+TOC1 条目名使用 `freertos`，这是该版本 boot0 内已有的**直接应用分发标识**，不表示工程依赖 FreeRTOS。反汇编确认它将应用地址存入独立入口变量，跳过 U-Boot 头修改、monitor/OP-TEE 交接分支。应用维持 Secure SVC，`nand-*` 使用 `SECURE` GIC Group 0，boot0 日志默认 PH0/PH1、115200 8N1；应用自行配置 UART，默认模板无输出。
 
 ## NAND 配置与烧写布局
 
@@ -86,3 +86,5 @@ python3 tools/nand_image.py pack \
 ## prebuilt 维护
 
 预编译文件来源、SHA256 和原有许可说明见 [prebuilt README](../prebuilt/r328/README.md)。项目不再保留完整系统镜像、FES1 或原 boot package；普通构建不联网、不提取系统镜像。更换 boot0 / NAND 型号需要核对 ABI、DDR 参数及读取方式后适配脚本，不能仅修改 JSON 绕过已核对的配置。
+
+`R328_BOOT_UART0_ROUTE`（`PH0_PH1` 或 `PB8_PB9`）只修改 boot0 日志路由，打包脚本对应参数为 `--boot-uart0-route`，清单字段为 `boot_uart0_route`。应用的 UART 句柄和引脚在源码中配置，FEL 清单不再携带 UART 配置。旧构建产物迁移后请重新打包。

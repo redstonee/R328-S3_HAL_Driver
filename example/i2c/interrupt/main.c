@@ -1,5 +1,86 @@
-#include "example.h"
+#include "main.h"
 #include "i2c_async_config.h"
+
+#define UART_TIMEOUT_MS 100U
+static UART_HandleTypeDef huart0;
+volatile uint32_t g_application_error;
+
+void Error_Handler(void)
+{
+    g_application_error = 1U;
+    R328_IRQ_Disable();
+    for (;;)
+    {
+        R328_WFI();
+    }
+}
+void SystemClock_Config(void)
+{
+    if (HAL_RCC_APB2_Config24M() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemCoreClockUpdate();
+}
+static void require_ok(const char *label, HAL_StatusTypeDef status)
+{
+    if (status != HAL_OK)
+    {
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        Error_Handler();
+    }
+}
+static void app_init(const char *banner)
+{
+    if (HAL_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemClock_Config();
+    /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
+     * The framework itself does not reserve any UART or initialize these pins. */
+    GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
+                                  .Mode = GPIO_MODE_AF_PP,
+                                  .Pull = GPIO_PULLUP,
+                                  .Drive = GPIO_DRIVE_LEVEL1,
+                                  .Alternate = 3U};
+    if (HAL_GPIO_Init(GPIOH, &uart_pins) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    huart0.Instance = UART0;
+    huart0.Init =
+        (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
+    require_ok("UART init=", HAL_UART_Init(&huart0));
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
+                               UART_TIMEOUT_MS);
+}
+
+static I2C_HandleTypeDef hi2c1;
+static HAL_StatusTypeDef i2c_init(uint32_t clock_speed)
+{
+    if (hi2c1.State == HAL_I2C_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
+    /* PB8 SCL / PB9 SDA, AF4. The TWI function controls open-drain output. */
+    GPIO_InitTypeDef pins = {.Pin = GPIO_PIN_8 | GPIO_PIN_9,
+                             .Mode = GPIO_MODE_AF_PP,
+                             .Pull = GPIO_PULLUP,
+                             .Drive = GPIO_DRIVE_LEVEL1,
+                             .Alternate = 4U};
+    HAL_StatusTypeDef status = HAL_GPIO_Init(GPIOB, &pins);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+    hi2c1.Instance = I2C1;
+    hi2c1.Init =
+        (I2C_InitTypeDef){.ClockSpeed = clock_speed, .AddressingMode = I2C_ADDRESSINGMODE_7BIT};
+    return HAL_I2C_Init(&hi2c1);
+}
 
 _Static_assert(EXAMPLE_I2C_ADDRESS >= 0x08U && EXAMPLE_I2C_ADDRESS <= 0x77U,
                "Expected a non-reserved 7-bit address");
@@ -56,7 +137,7 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *h)
 }
 static HAL_StatusTypeDef bus_init(void)
 {
-    HAL_StatusTypeDef result = Board_I2C1_Init(EXAMPLE_I2C_CLOCK_HZ);
+    HAL_StatusTypeDef result = i2c_init(EXAMPLE_I2C_CLOCK_HZ);
     return result == HAL_OK ? HAL_I2C_SetAsyncTimeout(&hi2c1, EXAMPLE_I2C_TIMEOUT_MS) : result;
 }
 static void report_completion(void)
@@ -69,13 +150,13 @@ static void report_completion(void)
     HAL_StatusTypeDef result = failed == 0U                                      ? HAL_OK
                                : (hi2c1.ErrorCode & HAL_I2C_ERROR_TIMEOUT) != 0U ? HAL_TIMEOUT
                                                                                  : HAL_ERROR;
-    Example_Report("I2C result=", result);
-    Example_PrintValue("elapsed ms=", elapsed);
-    Example_PrintValue("callback complete=", completed);
-    Example_PrintValue("I2C ErrorCode=", hi2c1.ErrorCode);
+    HAL_UART_PrintValue(&huart0, "I2C result=", result, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "elapsed ms=", elapsed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "callback complete=", completed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "I2C ErrorCode=", hi2c1.ErrorCode, UART_TIMEOUT_MS);
     if (completed != 0U && (operation == 'r' || operation == 'm'))
     {
-        Example_Dump(rx, sizeof(rx));
+        HAL_UART_HexDump(&huart0, rx, sizeof(rx), UART_TIMEOUT_MS);
     }
     completed = failed = 0U;
     operation = 0U;
@@ -84,14 +165,15 @@ static void start_transfer(uint8_t command)
 {
     if (hi2c1.State == HAL_I2C_STATE_BUSY)
     {
-        (void)Board_ConsoleWrite("I2C busy; buffers retained. a=abort.\r\n");
+        (void)HAL_UART_PrintString(&huart0, "I2C busy; buffers retained. a=abort.\r\n",
+                                   UART_TIMEOUT_MS);
         return;
     }
     /* Errors that reset the controller require Init before the next command. */
     if (hi2c1.State == HAL_I2C_STATE_RESET)
     {
         HAL_StatusTypeDef result = bus_init();
-        Example_Report("I2C reinit=", result);
+        HAL_UART_PrintValue(&huart0, "I2C reinit=", result, UART_TIMEOUT_MS);
         if (result != HAL_OK)
         {
             return;
@@ -119,10 +201,10 @@ static void start_transfer(uint8_t command)
                                      EXAMPLE_I2C_REGISTER_SIZE, rx, sizeof(rx));
         break;
     }
-    Example_Report("I2C start=", result);
+    HAL_UART_PrintValue(&huart0, "I2C start=", result, UART_TIMEOUT_MS);
     if (result != HAL_OK)
     {
-        Example_PrintValue("I2C ErrorCode=", hi2c1.ErrorCode);
+        HAL_UART_PrintValue(&huart0, "I2C ErrorCode=", hi2c1.ErrorCode, UART_TIMEOUT_MS);
         if (hi2c1.State != HAL_I2C_STATE_BUSY)
         {
             operation = 0U; /* A rejected start usually has no callback. */
@@ -131,14 +213,16 @@ static void start_transfer(uint8_t command)
 }
 int main(void)
 {
-    Example_Init("I2C1 / interrupt / generic master and register transfers");
-    Example_RequireOK("I2C init=", bus_init());
-    Example_PrintValue("I2C actual Hz=", hi2c1.ActualClockSpeed);
-    Example_PrintValue("7-bit address=", EXAMPLE_I2C_ADDRESS);
-    (void)Board_ConsoleWrite(
+    app_init("I2C1 / interrupt / generic master and register transfers");
+    require_ok("I2C init=", bus_init());
+    HAL_UART_PrintValue(&huart0, "I2C actual Hz=", hi2c1.ActualClockSpeed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "7-bit address=", EXAMPLE_I2C_ADDRESS, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(
+        &huart0,
         "Set i2c_async_config.h for your device.\r\n"
         "t=master TX, r=master RX, m=register read, w=register write, a=abort.\r\n"
-        "No automatic transfer; t/w send the configured payload.\r\n");
+        "No automatic transfer; t/w send the configured payload.\r\n",
+        UART_TIMEOUT_MS);
     for (;;)
     {
         /* Keep servicing deadlines/STOP completion while doing foreground work.
@@ -152,7 +236,7 @@ int main(void)
         }
         if (command == 'a')
         {
-            Example_Report("I2C abort=", HAL_I2C_Abort(&hi2c1));
+            HAL_UART_PrintValue(&huart0, "I2C abort=", HAL_I2C_Abort(&hi2c1), UART_TIMEOUT_MS);
         }
         else if (command == 't' || command == 'r' || command == 'm' || command == 'w')
         {

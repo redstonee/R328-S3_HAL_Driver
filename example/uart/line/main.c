@@ -1,13 +1,71 @@
-#include "example.h"
+#include "main.h"
+
+#define UART_TIMEOUT_MS 100U
+static UART_HandleTypeDef huart0;
+volatile uint32_t g_application_error;
+
+void Error_Handler(void)
+{
+    g_application_error = 1U;
+    R328_IRQ_Disable();
+    for (;;)
+    {
+        R328_WFI();
+    }
+}
+void SystemClock_Config(void)
+{
+    if (HAL_RCC_APB2_Config24M() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemCoreClockUpdate();
+}
+static void require_ok(const char *label, HAL_StatusTypeDef status)
+{
+    if (status != HAL_OK)
+    {
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        Error_Handler();
+    }
+}
+static void app_init(const char *banner)
+{
+    if (HAL_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemClock_Config();
+    /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
+     * The framework itself does not reserve any UART or initialize these pins. */
+    GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
+                                  .Mode = GPIO_MODE_AF_PP,
+                                  .Pull = GPIO_PULLUP,
+                                  .Drive = GPIO_DRIVE_LEVEL1,
+                                  .Alternate = 3U};
+    if (HAL_GPIO_Init(GPIOH, &uart_pins) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    huart0.Instance = UART0;
+    huart0.Init =
+        (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
+    require_ok("UART init=", HAL_UART_Init(&huart0));
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
+                               UART_TIMEOUT_MS);
+}
 
 #define LINE_CAPACITY 64U
 #define LINE_IDLE_TIMEOUT_MS 5000U
 
 int main(void)
 {
-    Example_Init("UART0 / bounded line input");
-    (void)Board_ConsoleWrite(
-        "Enter a line; CR/LF completes, Backspace edits, idle timeout is 5 s.\r\n");
+    app_init("UART0 / bounded line input");
+    (void)HAL_UART_PrintString(
+        &huart0, "Enter a line; CR/LF completes, Backspace edits, idle timeout is 5 s.\r\n",
+        UART_TIMEOUT_MS);
     uint8_t line[LINE_CAPACITY];
     uint32_t used = 0U, overflow = 0U, skip_lf = 0U, last_byte = HAL_GetTick();
     for (;;)
@@ -25,16 +83,17 @@ int main(void)
             skip_lf = byte == '\r';
             if (byte == '\r' || byte == '\n')
             {
-                (void)Board_ConsoleWrite("\r\n");
+                (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
                 if (overflow != 0U)
                 {
-                    (void)Board_ConsoleWrite("Line discarded: capacity is 63 bytes.\r\n");
+                    (void)HAL_UART_PrintString(&huart0, "Line discarded: capacity is 63 bytes.\r\n",
+                                               UART_TIMEOUT_MS);
                 }
                 else
                 {
-                    Example_PrintValue("line bytes=", used);
-                    Example_RequireOK("UART TX=", HAL_UART_Transmit(&huart0, line, used, 100U));
-                    (void)Board_ConsoleWrite("\r\n");
+                    HAL_UART_PrintValue(&huart0, "line bytes=", used, UART_TIMEOUT_MS);
+                    require_ok("UART TX=", HAL_UART_Transmit(&huart0, line, used, 100U));
+                    (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
                 }
                 used = 0U;
                 overflow = 0U;
@@ -42,14 +101,14 @@ int main(void)
             else if ((byte == 8U || byte == 127U) && overflow == 0U && used != 0U)
             {
                 --used;
-                (void)Board_ConsoleWrite("\b \b");
+                (void)HAL_UART_PrintString(&huart0, "\b \b", UART_TIMEOUT_MS);
             }
             else if (byte >= 32U && byte <= 126U && overflow == 0U)
             {
                 if (used < sizeof(line) - 1U)
                 {
                     line[used++] = byte;
-                    Example_RequireOK("UART TX=", HAL_UART_Transmit(&huart0, &byte, 1U, 100U));
+                    require_ok("UART TX=", HAL_UART_Transmit(&huart0, &byte, 1U, 100U));
                 }
                 else
                 {
@@ -59,8 +118,8 @@ int main(void)
         }
         else if (status != HAL_TIMEOUT && status != HAL_BUSY)
         {
-            Example_Report("UART RX=", status);
-            Example_PrintValue("UART ErrorCode=", huart0.ErrorCode);
+            HAL_UART_PrintValue(&huart0, "UART RX=", status, UART_TIMEOUT_MS);
+            HAL_UART_PrintValue(&huart0, "UART ErrorCode=", huart0.ErrorCode, UART_TIMEOUT_MS);
             used = 0U;
             overflow = 0U;
         }
@@ -69,7 +128,8 @@ int main(void)
         {
             used = 0U;
             overflow = 0U;
-            (void)Board_ConsoleWrite("\r\nPartial line discarded: idle timeout.\r\n");
+            (void)HAL_UART_PrintString(&huart0, "\r\nPartial line discarded: idle timeout.\r\n",
+                                       UART_TIMEOUT_MS);
         }
     }
 }

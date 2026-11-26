@@ -60,9 +60,7 @@ def check_binary(data, profile="DIRECT"):
         require(0 <= index * 4 + 8 + offset * 4 < len(data), "Vector target outside BIN")
 
 
-def package(
-    binary, elf, output, manifest, uart0_route, profile="DIRECT", loader=None, loader_output=None
-):
+def package(binary, elf, output, manifest, profile="DIRECT", loader=None, loader_output=None):
     origin, length = profile_layout(profile)
     inputs = {binary.resolve(), elf.resolve()}
     outputs = [output, manifest]
@@ -104,8 +102,6 @@ def package(
         "chip_id": CHIP_ID,
         "size": len(data),
         "sha256": digest(data),
-        "uart0_route": uart0_route,
-        "baud": 115200,
     }
     if loader_data is not None:
         report.update(
@@ -189,7 +185,7 @@ def failure_message(error):
     command = error.cmd
     operation = command[1] if isinstance(command, (list, tuple)) and len(command) > 1 else "unknown"
     if operation == "exec":
-        return "FEL exec failed or timed out; execution may have started: check UART"
+        return "FEL exec failed or timed out; execution may have started: check application output"
     if operation in ("write", "read"):
         return f"FEL {operation} failed; application was NOT executed. Re-enter BROM FEL before retrying"
     return f"FEL {operation} failed; application was NOT downloaded or executed. Check USB and reset into FEL"
@@ -233,7 +229,7 @@ def run(manifest, xfel="xfel", dry_run=False):
             invoke(xfel, "write", hex(address), str(snapshot))
             invoke(xfel, "read", hex(address), str(len(data)), str(readback))
             require(readback.read_bytes() == data, "SRAM readback mismatch; execution cancelled")
-    print("SRAM readback verified. Executing; observe UART0 (115200 8N1).", flush=True)
+    print("SRAM readback verified. Executing application.", flush=True)
     invoke(xfel, "exec", hex(entry))
 
 
@@ -243,7 +239,6 @@ def main():
     pack = commands.add_parser("package")
     for name in ("binary", "elf", "output", "manifest"):
         pack.add_argument("--" + name, type=Path, required=True)
-    pack.add_argument("--uart0-route", choices=("PH0_PH1", "PB8_PB9"), required=True)
     pack.add_argument("--profile", choices=("DIRECT", "FULL"), default="DIRECT")
     pack.add_argument("--loader", type=Path)
     pack.add_argument("--loader-output", type=Path)
@@ -258,7 +253,6 @@ def main():
             args.elf,
             args.output,
             args.manifest,
-            args.uart0_route,
             args.profile,
             args.loader,
             args.loader_output,

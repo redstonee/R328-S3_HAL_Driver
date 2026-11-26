@@ -75,7 +75,7 @@ def load_image(image, manifest):
         (ROOT / "prebuilt/r328/boot0-spinand.bin").read_bytes(),
         profile,
         firmware,
-        report["application_uart0_route"],
+        report["boot_uart0_route"],
     )
     require(data == expected and report == expected_report, "NAND layout or manifest mismatch")
     return data, report

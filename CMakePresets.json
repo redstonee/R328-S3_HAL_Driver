@@ -16,7 +16,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "R328_MEMORY": "SRAM",
-        "R328_UART0_ROUTE": "PH0_PH1",
         "R328_FEL_IMAGE": "OFF",
         "R328_GIC_SECURITY": "SECURE",
         "R328_NAND_IMAGE": "OFF",

@@ -1,5 +1,5 @@
 /* Real LEDC driver with a bounded FIFO, W1C flags and self-clearing reset model. */
-#include "board.h"
+#include "ledc_test_setup.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -118,7 +118,7 @@ static void test_init_and_pins(void)
 {
     reset_model();
     RCC_LEDC_BGR = 1U << 7; /* Preserve unrelated bits through RMW. */
-    assert(Board_LEDC_Init(4U) == HAL_OK);
+    assert(Test_LEDC_Init(4U) == HAL_OK);
     assert(RCC_LEDC_CLK == 0x80000000U);
     assert(RCC_LEDC_BGR == ((1U << 7) | (1U << 16) | 1U));
     assert(((GPIOE->CFG[0] >> 8) & 7U) == 2U);
@@ -139,7 +139,7 @@ static void test_frames_and_latch(void)
     {
         reset_model();
         uint32_t count = counts[i];
-        assert(Board_LEDC_Init(count) == HAL_OK);
+        assert(Test_LEDC_Init(count) == HAL_OK);
         for (uint32_t repeat = 0U; repeat < 2U; ++repeat)
         {
             uint32_t before = latch_requests;
@@ -163,10 +163,10 @@ static void test_validation_and_busy(void)
     assert(HAL_LEDC_Init(NULL) == HAL_ERROR);
     assert(HAL_LEDC_DeInit(NULL) == HAL_ERROR);
     assert(HAL_LEDC_Transmit(NULL, colors, 4U, 100U) == HAL_ERROR);
-    assert(Board_LEDC_Init(0U) == HAL_ERROR);
-    assert(Board_LEDC_Init(1025U) == HAL_ERROR);
+    assert(Test_LEDC_Init(0U) == HAL_ERROR);
+    assert(Test_LEDC_Init(1025U) == HAL_ERROR);
     assert(RCC_LEDC_CLK == 0U);
-    assert(Board_LEDC_Init(4U) == HAL_OK);
+    assert(Test_LEDC_Init(4U) == HAL_OK);
     LEDC_InitTypeDef valid = hledc.Init;
     uint32_t *fields[] = {&hledc.Init.T0H, &hledc.Init.T0L,         &hledc.Init.T1H,
                           &hledc.Init.T1L, &hledc.Init.ResetTimeUs, &hledc.Init.WaitDataTimeUs};
@@ -200,7 +200,7 @@ static void test_errors_timeouts_and_recovery(void)
     for (uint32_t error = 8U; error <= 24U; error += 8U)
     {
         reset_model();
-        assert(Board_LEDC_Init(4U) == HAL_OK);
+        assert(Test_LEDC_Init(4U) == HAL_OK);
         injected_error = error;
         assert(HAL_LEDC_Transmit(&hledc, colors, 4U, 100U) == HAL_ERROR);
         assert(hledc.ErrorCode == (((error & 8U) != 0U ? HAL_LEDC_ERROR_UNDERRUN : 0U) |
@@ -213,7 +213,7 @@ static void test_errors_timeouts_and_recovery(void)
         assert(HAL_LEDC_Transmit(&hledc, colors, 4U, 100U) == HAL_OK);
     }
     reset_model();
-    assert(Board_LEDC_Init(4U) == HAL_OK);
+    assert(Test_LEDC_Init(4U) == HAL_OK);
     stall = 1;
     tick = UINT32_MAX - 2U;
     assert(HAL_LEDC_Transmit(&hledc, colors, 4U, 10U) == HAL_TIMEOUT);
@@ -231,7 +231,7 @@ static void test_errors_timeouts_and_recovery(void)
     assert(hledc.ErrorCode == HAL_LEDC_ERROR_FIFO);
     reset_model();
     stuck_reset = 1;
-    assert(Board_LEDC_Init(4U) == HAL_TIMEOUT);
+    assert(Test_LEDC_Init(4U) == HAL_TIMEOUT);
     assert(hledc.ErrorCode == HAL_LEDC_ERROR_RESET && hledc.Lock == HAL_UNLOCKED);
     assert(hledc.State == HAL_LEDC_STATE_RESET);
 }

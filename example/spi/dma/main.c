@@ -1,4 +1,109 @@
-#include "example.h"
+#include "main.h"
+
+#define UART_TIMEOUT_MS 100U
+static UART_HandleTypeDef huart0;
+volatile uint32_t g_application_error;
+
+void Error_Handler(void)
+{
+    g_application_error = 1U;
+    R328_IRQ_Disable();
+    for (;;)
+    {
+        R328_WFI();
+    }
+}
+void SystemClock_Config(void)
+{
+    if (HAL_RCC_APB2_Config24M() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemCoreClockUpdate();
+}
+static void require_ok(const char *label, HAL_StatusTypeDef status)
+{
+    if (status != HAL_OK)
+    {
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        Error_Handler();
+    }
+}
+static void app_init(const char *banner)
+{
+    if (HAL_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemClock_Config();
+    /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
+     * The framework itself does not reserve any UART or initialize these pins. */
+    GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
+                                  .Mode = GPIO_MODE_AF_PP,
+                                  .Pull = GPIO_PULLUP,
+                                  .Drive = GPIO_DRIVE_LEVEL1,
+                                  .Alternate = 3U};
+    if (HAL_GPIO_Init(GPIOH, &uart_pins) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    huart0.Instance = UART0;
+    huart0.Init =
+        (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
+    require_ok("UART init=", HAL_UART_Init(&huart0));
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
+                               UART_TIMEOUT_MS);
+}
+
+static SPI_HandleTypeDef hspi1;
+static HAL_StatusTypeDef spi_init(uint32_t baud_rate_hz)
+{
+    if (hspi1.State == HAL_SPI_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
+    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4 | GPIO_PIN_8, GPIO_PIN_SET);
+    GPIO_InitTypeDef pins = {.Pin = GPIO_PIN_4 | GPIO_PIN_8,
+                             .Mode = GPIO_MODE_OUTPUT_PP,
+                             .Pull = GPIO_PULLUP,
+                             .Drive = GPIO_DRIVE_LEVEL1};
+    HAL_StatusTypeDef status = HAL_GPIO_Init(GPIOH, &pins);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+    pins = (GPIO_InitTypeDef){.Pin = GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7,
+                              .Mode = GPIO_MODE_AF_PP,
+                              .Pull = GPIO_NOPULL,
+                              .Drive = GPIO_DRIVE_LEVEL1,
+                              .Alternate = 3U};
+    status = HAL_GPIO_Init(GPIOH, &pins);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+    hspi1.Instance = SPI1;
+    hspi1.Init = (SPI_InitTypeDef){.Mode = SPI_MODE_MASTER,
+                                   .DataSize = SPI_DATASIZE_8BIT,
+                                   .CLKPolarity = SPI_POLARITY_LOW,
+                                   .CLKPhase = SPI_PHASE_1EDGE,
+                                   .NSS = SPI_NSS_SOFT,
+                                   .BaudRateHz = baud_rate_hz,
+                                   .FirstBit = SPI_FIRSTBIT_MSB,
+                                   .ChipSelect = 0U};
+    return HAL_SPI_Init(&hspi1);
+}
+static HAL_StatusTypeDef spi_deselect(void)
+{
+    if (hspi1.State == HAL_SPI_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
+    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4 | GPIO_PIN_8, GPIO_PIN_SET);
+    return HAL_OK;
+}
 
 #define EXAMPLE_SPI_CLOCK_HZ 1000000U
 #define EXAMPLE_SPI_TIMEOUT_MS 100U
@@ -50,10 +155,10 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *h)
 }
 static HAL_StatusTypeDef bus_init(void)
 {
-    HAL_StatusTypeDef result = Board_SPI1_Init(EXAMPLE_SPI_CLOCK_HZ);
+    HAL_StatusTypeDef result = spi_init(EXAMPLE_SPI_CLOCK_HZ);
     if (result == HAL_OK)
     {
-        result = Board_SPI1_Select(BOARD_SPI_NONE);
+        result = spi_deselect();
     }
     return result == HAL_OK ? HAL_SPI_SetAsyncTimeout(&hspi1, EXAMPLE_SPI_TIMEOUT_MS) : result;
 }
@@ -67,10 +172,10 @@ static void report_completion(void)
     HAL_StatusTypeDef result = failed == 0U                                      ? HAL_OK
                                : (hspi1.ErrorCode & HAL_SPI_ERROR_TIMEOUT) != 0U ? HAL_TIMEOUT
                                                                                  : HAL_ERROR;
-    Example_Report("SPI result=", result);
-    Example_PrintValue("elapsed ms=", elapsed);
-    Example_PrintValue("callback complete=", completed);
-    Example_PrintValue("SPI ErrorCode=", hspi1.ErrorCode);
+    HAL_UART_PrintValue(&huart0, "SPI result=", result, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "elapsed ms=", elapsed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "callback complete=", completed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "SPI ErrorCode=", hspi1.ErrorCode, UART_TIMEOUT_MS);
     if (completed != 0U && (operation == 'r' || operation == 'x'))
     {
         uint32_t mismatches = 0U;
@@ -82,9 +187,10 @@ static void report_completion(void)
                 ++mismatches;
             }
         }
-        Example_PrintValue("mismatched bytes=", mismatches);
-        (void)Board_ConsoleWrite(mismatches == 0U ? "Loopback PASS\r\n" : "Loopback FAIL\r\n");
-        Example_Dump(rx, EXAMPLE_SPI_PREVIEW_SIZE);
+        HAL_UART_PrintValue(&huart0, "mismatched bytes=", mismatches, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(
+            &huart0, mismatches == 0U ? "Loopback PASS\r\n" : "Loopback FAIL\r\n", UART_TIMEOUT_MS);
+        HAL_UART_HexDump(&huart0, rx, EXAMPLE_SPI_PREVIEW_SIZE, UART_TIMEOUT_MS);
     }
     completed = failed = 0U;
     operation = 0U;
@@ -93,13 +199,14 @@ static void start_transfer(uint8_t command)
 {
     if (hspi1.State == HAL_SPI_STATE_BUSY)
     {
-        (void)Board_ConsoleWrite("SPI busy; buffers retained. a=abort.\r\n");
+        (void)HAL_UART_PrintString(&huart0, "SPI busy; buffers retained. a=abort.\r\n",
+                                   UART_TIMEOUT_MS);
         return;
     }
     if (hspi1.State == HAL_SPI_STATE_RESET)
     {
         HAL_StatusTypeDef result = bus_init();
-        Example_Report("SPI reinit=", result);
+        HAL_UART_PrintValue(&huart0, "SPI reinit=", result, UART_TIMEOUT_MS);
         if (result != HAL_OK)
         {
             return;
@@ -127,10 +234,10 @@ static void start_transfer(uint8_t command)
     {
         result = HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, sizeof(tx));
     }
-    Example_Report("SPI start=", result);
+    HAL_UART_PrintValue(&huart0, "SPI start=", result, UART_TIMEOUT_MS);
     if (result != HAL_OK)
     {
-        Example_PrintValue("SPI ErrorCode=", hspi1.ErrorCode);
+        HAL_UART_PrintValue(&huart0, "SPI ErrorCode=", hspi1.ErrorCode, UART_TIMEOUT_MS);
         if (hspi1.State != HAL_SPI_STATE_BUSY)
         {
             operation = 0U;
@@ -140,15 +247,17 @@ static void start_transfer(uint8_t command)
 }
 int main(void)
 {
-    Example_Init("SPI1 / DMA / external MOSI-MISO loopback");
-    Example_RequireOK("SPI init=", bus_init());
-    Example_RequireOK("TX DMA init=", HAL_DMA_Init(&tx_dma));
-    Example_RequireOK("RX DMA init=", HAL_DMA_Init(&rx_dma));
+    app_init("SPI1 / DMA / external MOSI-MISO loopback");
+    require_ok("SPI init=", bus_init());
+    require_ok("TX DMA init=", HAL_DMA_Init(&tx_dma));
+    require_ok("RX DMA init=", HAL_DMA_Init(&rx_dma));
     hspi1.hdmatx = &tx_dma;
     hspi1.hdmarx = &rx_dma;
-    Example_PrintValue("SPI actual Hz=", hspi1.ActualBaudRateHz);
-    (void)Board_ConsoleWrite("Connect PH6 MOSI to PH7 MISO; both device selects stay high.\r\n"
-                             "t=TX only, r=RX dummy 0xFF, x=full-duplex loopback, a=abort.\r\n");
+    HAL_UART_PrintValue(&huart0, "SPI actual Hz=", hspi1.ActualBaudRateHz, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0,
+                               "Connect PH6 MOSI to PH7 MISO; both device selects stay high.\r\n"
+                               "t=TX only, r=RX dummy 0xFF, x=full-duplex loopback, a=abort.\r\n",
+                               UART_TIMEOUT_MS);
     for (;;)
     {
         HAL_SPI_Process(&hspi1);
@@ -160,7 +269,7 @@ int main(void)
         }
         if (command == 'a')
         {
-            Example_Report("SPI abort=", HAL_SPI_Abort(&hspi1));
+            HAL_UART_PrintValue(&huart0, "SPI abort=", HAL_SPI_Abort(&hspi1), UART_TIMEOUT_MS);
         }
         else if (command == 't' || command == 'r' || command == 'x')
         {

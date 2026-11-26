@@ -16,7 +16,7 @@ void ILI9341_Backlight(uint32_t enabled)
 }
 static HAL_StatusTypeDef deselect(HAL_StatusTypeDef status)
 {
-    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(DISPLAY_SPI_NONE);
     return status != HAL_OK ? status : release;
 }
 /* Caller owns LCD CS; D/C may change only between completed byte transfers. */
@@ -46,7 +46,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
     {
         return status;
     }
-    status = Board_SPI1_Init(ILI9341_SPI_HZ);
+    status = hspi1.State == HAL_SPI_STATE_READY ? HAL_OK : HAL_ERROR;
     if (status != HAL_OK)
     {
         return status;
@@ -76,7 +76,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
         {0x13U, 0U, {0U}},                  /* Normal mode */
         {0x11U, 0U, {0U}},                  /* Sleep out */
     };
-    status = Display_SPI_Select(BOARD_SPI_LCD);
+    status = Display_SPI_Select(DISPLAY_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;
@@ -91,7 +91,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
         return status;
     }
     HAL_Delay(150U);
-    status = Display_SPI_Select(BOARD_SPI_LCD);
+    status = Display_SPI_Select(DISPLAY_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;
@@ -144,7 +144,7 @@ HAL_StatusTypeDef ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint1
         pixels[i] = (uint8_t)(rgb565 >> 8);
         pixels[i + 1U] = (uint8_t)rgb565;
     }
-    HAL_StatusTypeDef status = Display_SPI_Select(BOARD_SPI_LCD);
+    HAL_StatusTypeDef status = Display_SPI_Select(DISPLAY_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;

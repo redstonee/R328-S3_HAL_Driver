@@ -14,11 +14,9 @@ clocks 用于观察时钟和 MOSI；没有器件选中时，MISO 不保证有效
 
 ## 通用中断与 DMA
 
-`interrupt` 与 `dma` 为两个独立例程，只需复制对应 `main.c` 和公共 `example.c/h`，不依赖 LCD / 触摸设备文件：
+`interrupt` 与 `dma` 为两个独立例程，只需复制对应 `main.c`，不依赖 LCD / 触摸设备文件：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/spi/interrupt/main.c Core/Src/main.c
 # DMA 版本改为：cp example/spi/dma/main.c Core/Src/main.c
 ```

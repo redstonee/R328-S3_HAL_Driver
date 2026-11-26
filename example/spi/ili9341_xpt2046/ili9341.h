@@ -1,6 +1,6 @@
 #ifndef EXAMPLE_ILI9341_H
 #define EXAMPLE_ILI9341_H
-#include "board.h"
+#include "r328_hal.h"
 
 #define ILI9341_WIDTH 240U
 #define ILI9341_HEIGHT 320U

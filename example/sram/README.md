@@ -5,8 +5,6 @@
 先备份自己的 `Core/Src/main.c`，按 [例程索引](../README.md) 清理前一例程的附加文件，再从工程根目录执行：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/sram/memory/main.c Core/Src/main.c
 cmake --preset fel-debug
 cmake --build --preset fel-debug

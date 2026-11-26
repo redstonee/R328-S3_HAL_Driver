@@ -1,4 +1,4 @@
-#include "r328_hal.h"
+#include "r328_hal_bus_private.h"
 
 static int valid_instance(const UART_TypeDef *instance)
 {
@@ -8,7 +8,7 @@ static HAL_StatusTypeDef wait_flag(UART_HandleTypeDef *handle, volatile uint32_t
                                    uint32_t mask, uint32_t start, uint32_t timeout)
 {
     UNUSED(handle);
-    while ((*reg & mask) == 0U)
+    while ((BUS_READ(*reg) & mask) == 0U)
     {
         if (timeout != HAL_MAX_DELAY && (uint32_t)(HAL_GetTick() - start) >= timeout)
         {
@@ -97,10 +97,9 @@ HAL_StatusTypeDef HAL_UART_DeInit(UART_HandleTypeDef *handle)
     HAL_Unlock(&handle->Lock);
     return HAL_OK;
 }
-HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
-                                    uint32_t timeout)
+static HAL_StatusTypeDef tx_begin(UART_HandleTypeDef *handle)
 {
-    if (handle == NULL || !valid_instance(handle->Instance) || (data == NULL && size != 0U) ||
+    if (handle == NULL || !valid_instance(handle->Instance) ||
         handle->State == HAL_UART_STATE_RESET)
     {
         return HAL_ERROR;
@@ -110,19 +109,151 @@ HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *d
         return HAL_BUSY;
     }
     handle->State = HAL_UART_STATE_BUSY_TX;
-    uint32_t start = HAL_GetTick();
-    for (uint32_t index = 0U; index < size; ++index)
+    return HAL_OK;
+}
+static HAL_StatusTypeDef tx_write(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
+                                  uint32_t start, uint32_t timeout)
+{
+    for (uint32_t i = 0U; i < size; ++i)
     {
-        HAL_StatusTypeDef status = wait_flag(handle, &handle->Instance->USR, 2U, start, timeout);
-        if (status != HAL_OK)
+        HAL_StatusTypeDef result = wait_flag(handle, &handle->Instance->USR, 2U, start, timeout);
+        if (result != HAL_OK)
         {
-            return finish(handle, status);
+            return result;
         }
-        handle->Instance->DATA = data[index];
+        BUS_WRITE(handle->Instance->DATA, data[i]);
     }
-    HAL_StatusTypeDef status =
-        size == 0U ? HAL_OK : wait_flag(handle, &handle->Instance->LSR, 1U << 6, start, timeout);
-    return finish(handle, status);
+    return HAL_OK;
+}
+static HAL_StatusTypeDef tx_end(UART_HandleTypeDef *handle, HAL_StatusTypeDef result,
+                                uint32_t start, uint32_t timeout)
+{
+    if (result == HAL_OK)
+    {
+        result = wait_flag(handle, &handle->Instance->LSR, 1U << 6, start, timeout);
+    }
+    return finish(handle, result);
+}
+HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
+                                    uint32_t timeout)
+{
+    if (data == NULL && size != 0U)
+    {
+        return HAL_ERROR;
+    }
+    HAL_StatusTypeDef result = tx_begin(handle);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    if (size == 0U)
+    {
+        return finish(handle, HAL_OK);
+    }
+    uint32_t start = HAL_GetTick();
+    result = tx_write(handle, data, size, start, timeout);
+    return tx_end(handle, result, start, timeout);
+}
+static uint32_t text_length(const char *text)
+{
+    uint32_t length = 0U;
+    while (text[length] != '\0')
+    {
+        ++length;
+    }
+    return length;
+}
+static uint32_t decimal(uint8_t buffer[10], uint32_t value)
+{
+    uint32_t offset = 10U;
+    do
+    {
+        buffer[--offset] = (uint8_t)('0' + value % 10U);
+        value /= 10U;
+    } while (value != 0U);
+    return offset;
+}
+static const char hex_digits[] = "0123456789ABCDEF";
+HAL_StatusTypeDef HAL_UART_PrintString(UART_HandleTypeDef *handle, const char *text,
+                                       uint32_t timeout)
+{
+    return text == NULL
+               ? HAL_ERROR
+               : HAL_UART_Transmit(handle, (const uint8_t *)text, text_length(text), timeout);
+}
+HAL_StatusTypeDef HAL_UART_PrintU32(UART_HandleTypeDef *handle, uint32_t value, uint32_t timeout)
+{
+    uint8_t text[10];
+    uint32_t offset = decimal(text, value);
+    return HAL_UART_Transmit(handle, &text[offset], sizeof(text) - offset, timeout);
+}
+HAL_StatusTypeDef HAL_UART_PrintHex(UART_HandleTypeDef *handle, uint32_t value, uint32_t timeout)
+{
+    uint8_t text[8];
+    for (uint32_t i = 0U; i < sizeof(text); ++i)
+    {
+        text[i] = (uint8_t)hex_digits[(value >> ((7U - i) * 4U)) & 0xFU];
+    }
+    return HAL_UART_Transmit(handle, text, sizeof(text), timeout);
+}
+HAL_StatusTypeDef HAL_UART_PrintValue(UART_HandleTypeDef *handle, const char *label, uint32_t value,
+                                      uint32_t timeout)
+{
+    if (label == NULL)
+    {
+        return HAL_ERROR;
+    }
+    HAL_StatusTypeDef result = tx_begin(handle);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    uint32_t start = HAL_GetTick();
+    uint8_t text[10];
+    uint32_t offset = decimal(text, value);
+    result = tx_write(handle, (const uint8_t *)label, text_length(label), start, timeout);
+    if (result == HAL_OK)
+    {
+        result = tx_write(handle, &text[offset], sizeof(text) - offset, start, timeout);
+    }
+    if (result == HAL_OK)
+    {
+        result = tx_write(handle, (const uint8_t *)"\r\n", 2U, start, timeout);
+    }
+    return tx_end(handle, result, start, timeout);
+}
+HAL_StatusTypeDef HAL_UART_HexDump(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
+                                   uint32_t timeout)
+{
+    if (data == NULL && size != 0U)
+    {
+        return HAL_ERROR;
+    }
+    HAL_StatusTypeDef result = tx_begin(handle);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    uint32_t start = HAL_GetTick();
+    while (size != 0U && result == HAL_OK)
+    {
+        uint8_t text[48]; /* Sixteen input bytes, bounded stack use. */
+        uint32_t count = size < 16U ? size : 16U;
+        for (uint32_t i = 0U; i < count; ++i)
+        {
+            text[i * 3U] = (uint8_t)hex_digits[data[i] >> 4];
+            text[i * 3U + 1U] = (uint8_t)hex_digits[data[i] & 0xFU];
+            text[i * 3U + 2U] = ' ';
+        }
+        result = tx_write(handle, text, count * 3U, start, timeout);
+        data += count;
+        size -= count;
+    }
+    if (result == HAL_OK)
+    {
+        result = tx_write(handle, (const uint8_t *)"\r\n", 2U, start, timeout);
+    }
+    return tx_end(handle, result, start, timeout);
 }
 HAL_StatusTypeDef HAL_UART_Receive(UART_HandleTypeDef *handle, uint8_t *data, uint32_t size,
                                    uint32_t timeout)

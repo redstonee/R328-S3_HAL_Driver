@@ -245,7 +245,7 @@ def build_image(
         "handoff": "BROM -> boot0 (DDR init, NAND read, copy) -> bare metal",
         "hardware_tested": False,
         "gic": "SECURE / Group 0",
-        "application_uart0_route": route,
+        "boot_uart0_route": route,
         "application_region": {"origin": hex(APP_ORIGIN), "length": APP_LENGTH},
         "ddr": profile["ddr"],
         "nand": {
@@ -301,7 +301,13 @@ def main() -> None:
         sub.add_argument("--profile", type=Path, default=ROOT / "prebuilt/r328/spinand.json")
         sub.add_argument("--firmware", type=Path, required=True)
         sub.add_argument("--elf", type=Path, required=True)
-        sub.add_argument("--uart0-route", default="PH0_PH1", choices=("PH0_PH1", "PB8_PB9"))
+        sub.add_argument(
+            "--boot-uart0-route",
+            "--uart0-route",
+            dest="uart0_route",
+            default="PH0_PH1",
+            choices=("PH0_PH1", "PB8_PB9"),
+        )
         sub.add_argument("--output", type=Path, required=True)
         sub.add_argument("--package", type=Path, required=True)
         sub.add_argument("--configured-boot0", type=Path, required=True)

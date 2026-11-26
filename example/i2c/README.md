@@ -9,7 +9,7 @@
 | [dma](dma/main.c) | 通用 `_DMA` 主机收发、寄存器读写、DMA 连接与错误恢复 |
 | [bmp280](bmp280/README.md) | PB8/PB9、地址 0x76，轮询 / IRQ / DMA 温度与气压测试 |
 
-默认 TWI1 PB8 SCL / PB9 SDA、AF4、100 kHz。外部上拉应按负载和速率配置；UART0 选择 PB8/PB9 路由时不能同时使用此 TWI1 配置。
+默认 TWI1 PB8 SCL / PB9 SDA、AF4、100 kHz。外部上拉应按负载和速率配置；本例诊断 UART0 使用 PH0/PH1；若应用将 UART 移到 PB8/PB9，应自行处理引脚冲突。
 
 地址在配置中使用原始 7 位值，调用 HAL 时左移一位。地址 NACK 为设备未响应；扫描遇到 NACK 后继续，其他错误终止本轮。总线错误或超时导致句柄 RESET 时，示例显式重新初始化后等待下一条命令。
 
@@ -17,11 +17,9 @@ memory 例程还需将 `memory/config.h` 复制到 `Core/Inc/`。复制后的 `C
 
 ## 通用中断与 DMA
 
-`interrupt` 与 `dma` 为两个独立例程，直接展示对应 HAL API，不依赖 BMP280。除公共文件外，将选定的 `main.c` 复制到 `Core/Src/`，并把 `i2c/i2c_async_config.h` 复制到 `Core/Inc/`：
+`interrupt` 与 `dma` 为两个独立例程，直接展示对应 HAL API，不依赖 BMP280。将选定的 `main.c` 复制到 `Core/Src/`，并把 `i2c/i2c_async_config.h` 复制到 `Core/Inc/`：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/i2c/interrupt/main.c Core/Src/main.c
 # DMA 版本改为：cp example/i2c/dma/main.c Core/Src/main.c
 cp example/i2c/i2c_async_config.h Core/Inc/

@@ -50,7 +50,7 @@ def main():
     check(not undefined, f"Unresolved symbols: {undefined}")
     disasm = subprocess.check_output([args.objdump, "-d", args.elf], text=True)
     check("spsr" in disasm.lower() and "{r0, r1, r2" in disasm, "Missing IRQ context preservation")
-    check("<HAL_UART_MspInit>" in disasm, "Missing board MSP override")
+    check("<HAL_Init>" in disasm, "Missing HAL initialization")
     print(
         f"ARM layout OK: origin={args.origin:#010x}, image={len(binary)} bytes, "
         f"free before stacks={symbols['__stack_bottom__'] - symbols['__static_end__']} bytes"

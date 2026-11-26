@@ -5,8 +5,6 @@ TWI1 使用 PB8 SCL / PB9 SDA，100 kHz；UART0 为 PH0 TX / PH1 RX，115200 8N1
 备份当前应用后，从工程根目录复制：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/i2c/bmp280/main.c Core/Src/main.c
 cp example/i2c/bmp280/bmp280.c Core/Src/
 cp example/i2c/bmp280/bmp280.h Core/Inc/

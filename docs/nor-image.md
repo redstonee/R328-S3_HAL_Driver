@@ -39,7 +39,7 @@ NOR 使用 **SPI0 / CS0**，与例程中显示屏 / 触摸所用的 SPI1 独立�
 | PC3 | /CS |
 | PC4 | DO / IO1（MISO） |
 
-单线模式下 `/WP`、`/HOLD` 保持高电平，电源和 IO 电压按具体料号的数据手册连接。启动日志与应用 UART0 默认仍为 **PH0 TX / PH1 RX，115200 8N1**。
+单线模式下 `/WP`、`/HOLD` 保持高电平，电源和 IO 电压按具体料号的数据手册连接。boot0 日志默认使用 **PH0 TX / PH1 RX，115200 8N1**，由 `R328_BOOT_UART0_ROUTE` 控制；应用 UART 独立配置，默认模板无输出。
 
 | Flash 字节偏移 | 内容 |
 | --- | --- |
@@ -84,4 +84,4 @@ python3 tools/nor_image.py pack \
 
 主机测试执行实际 NOR 读取源码，通过寄存器 / FIFO 模型覆盖 `03h` 指令、跨地址边界、坏包、checksum、FIFO 错误、复位与传输超时。可用 QEMU 时另验证注入后的 Thumb 分发、原厂 TOC1 解析、完整应用复制和直接跳转；仿真预装 TOC1 并替换 NOR 读取器入口为成功返回，因此 **不模拟 BROM 读 NOR、真实 SPI 时序或 DDR 训练**。
 
-**目前尚未在 W25Q64 上验证实板冷启动。** 镜像与源码已通过软件校验，首次硬件验证应观察 boot0 的 DRAM 日志和应用 UART 输出。必要 prebuilt 的来源与许可见 [说明](../prebuilt/r328/README.md)。
+**目前尚未在 W25Q64 上验证实板冷启动。** 镜像与源码已通过软件校验，首次硬件验证应观察 boot0 的 DRAM 日志和所选例程的输出。必要 prebuilt 的来源与许可见 [说明](../prebuilt/r328/README.md)。

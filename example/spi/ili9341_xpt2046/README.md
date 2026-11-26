@@ -6,7 +6,7 @@
 
 ## 示例引脚
 
-以下为代码中的默认配置，移植时同步修改 MSP、BSP 片选和设备控制引脚：
+以下为代码中的默认配置，移植时同步修改本目录 `display_bus.c` 的 SPI 引脚 / 片选和设备头文件的控制引脚：
 
 | 信号 | 默认配置 |
 | --- | --- |
@@ -25,8 +25,6 @@ UART0 默认 PH0/PH1。本例不读取 LCD ID 或 GRAM，LCD MISO 无需连接�
 从工程根目录执行，先备份自己的 `Core/Src/main.c`；切换例程时先移出前一例程的附加文件。
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/spi/ili9341_xpt2046/main.c Core/Src/main.c
 cp example/spi/ili9341_xpt2046/ili9341.c example/spi/ili9341_xpt2046/xpt2046.c Core/Src/
 cp example/spi/ili9341_xpt2046/ili9341.h example/spi/ili9341_xpt2046/xpt2046.h Core/Inc/
@@ -39,7 +37,7 @@ ctest --preset fel-debug
 cmake --build build/fel-debug --target fel-run
 ```
 
-公共文件、切换与恢复说明见 [例程索引](../../README.md)。复制后修改 `Core` 内的设备文件即可。xfel 不在 PATH 时，在配置命令中增加 `-DR328_XFEL=/absolute/path/to/xfel`。
+切换与恢复说明见 [例程索引](../../README.md)。复制后修改 `Core` 内的设备文件即可。xfel 不在 PATH 时，在配置命令中增加 `-DR328_XFEL=/absolute/path/to/xfel`。
 
 ## 显示与共享总线
 
@@ -80,3 +78,5 @@ DMA 使用通道 0（TX）、1（RX）与 SPI1 请求 23。LCD 的 256 字节像
 主机协议模型覆盖三种传输模式下的 RGB565 字节序、像素数量、矩形裁剪、触摸解码与滤波、片选释放后的独立速率切换，以及切换失败时不选中设备，不模拟面板供电或触摸校准。SPI 寄存器模型另验证真实 HAL 的分频、PLL 锁定与失败处理、FIFO、DMA 描述符、IRQ 完成顺序、超时与中止。
 
 寄存器和时序依据：[ILI9341 手册](https://cdn-shop.adafruit.com/datasheets/ILI9341.pdf)、[XPT2046 手册](https://files.waveshare.com/upload/9/98/XPT2046-EN.pdf)。例程不依赖 Arduino 或图形库。
+
+`Display_SPI_Init()` 负责本例的 SPI1、GPIO 片选和 DMA 初始化，须先于 `ILI9341_Init()` / `XPT2046_Init()` 调用。SPI 错误复位后也先重新初始化总线，再初始化设备。

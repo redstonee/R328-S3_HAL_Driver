@@ -1,6 +1,6 @@
 /* Deterministic MMIO model: validates command sequences, FIFO accesses, W1C,
  * timeouts and cleanup. It cannot validate pins, real clocks or audio timing. */
-#include "board.h"
+#include "bus_test_setup.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -290,11 +290,11 @@ static void clear_twi_model(void)
 }
 static void test_spi(void)
 {
-    assert(Board_SPI1_Init(1000000U) == HAL_OK);
+    assert(Test_SPI1_Init(1000000U) == HAL_OK);
     assert(hspi1.ActualBaudRateHz == 1000000U);
     assert((GPIOH->CFG[0] & 0xFFFF0000U) == 0x33310000U);
     assert((GPIOH->CFG[1] & 7U) == 1U);
-    assert(Board_SPI1_Select(BOARD_SPI_TOUCH) == HAL_OK);
+    assert(Test_SPI1_Select(TEST_SPI_TOUCH) == HAL_OK);
     assert((GPIOH->DAT & 0x110U) == 0x10U);
     uint8_t tx[137], rx[137];
     for (uint32_t i = 0U; i < sizeof(tx); ++i)
@@ -309,7 +309,7 @@ static void test_spi(void)
         assert(rx[i] == (uint8_t)(tx[i] ^ 0xA5U));
     }
     assert((GPIOH->DAT & 0x110U) == 0x10U); /* Caller keeps GPIO CS through multiple calls. */
-    assert(Board_SPI1_Select(BOARD_SPI_NONE) == HAL_OK);
+    assert(Test_SPI1_Select(TEST_SPI_NONE) == HAL_OK);
     assert(HAL_SPI_Receive(&hspi1, rx, sizeof(rx), 100U) == HAL_OK && rx[136] == 0xFFU);
     hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
     assert(HAL_SPI_Init(&hspi1) == HAL_OK);
@@ -345,7 +345,7 @@ static void test_spi_clocks(void)
 {
     /* The default LCD rate needs PLL_PERI0; the touch rate keeps OSC24M. */
     RCC_PLL_PERI0_CTRL = 0x08003100U;
-    assert(Board_SPI1_Init(10000000U) == HAL_OK);
+    assert(Test_SPI1_Init(10000000U) == HAL_OK);
     assert(hspi1.ActualBaudRateHz == 10000000U);
     assert(RCC_SPI_CLK(1) == 0x81000002U && SPI1->CCR == 0x1009U);
     assert((RCC_PLL_PERI0_CTRL & 0xB800FFFFU) == 0xB8003100U);
@@ -400,7 +400,7 @@ static void test_spi_clocks(void)
 static void test_i2c(void)
 {
     clear_twi_model();
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(hi2c1.ActualClockSpeed == 100000U);
     assert((GPIOB->CFG[1] & 0xFFU) == 0x44U);
     uint8_t data[3];
@@ -433,15 +433,15 @@ static void test_i2c(void)
     assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, data, 1U, 5U) == HAL_TIMEOUT);
     assert(hi2c1.Lock == HAL_UNLOCKED && hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
-    assert(Board_I2C1_Init(400000U) == HAL_OK && hi2c1.ActualClockSpeed == 400000U);
+    assert(Test_I2C1_Init(400000U) == HAL_OK && hi2c1.ActualClockSpeed == 400000U);
     stop_stall = 1;
     assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, NULL, 0U, 5U) == HAL_TIMEOUT);
     assert(hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
     stuck_reset = 1;
-    assert(Board_I2C1_Init(100000U) == HAL_TIMEOUT);
+    assert(Test_I2C1_Init(100000U) == HAL_TIMEOUT);
     stuck_reset = 0;
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_Mem_Read(&hi2c1, 0xA1U, 0U, 1U, data, 1U, 10U) == HAL_ERROR);
     assert(HAL_I2C_Mem_Read(&hi2c1, 0xA0U, 0x100U, 1U, data, 1U, 10U) == HAL_ERROR);
     assert(HAL_I2C_Master_Receive(&hi2c1, 0xA0U, NULL, 0U, 10U) == HAL_ERROR);
@@ -455,7 +455,7 @@ static void test_i2s(void)
     RCC_I2S_CLK(1U) = 1UL << 31;
     assert(HAL_RCC_AudioPLL_Config(RCC_AUDIO_FAMILY_48K) == HAL_BUSY);
     RCC_I2S_CLK(1U) = 0U;
-    assert(Board_I2S0_Init(48000U, 16U) == HAL_OK);
+    assert(Test_I2S0_Init(48000U, 16U) == HAL_OK);
     assert(HAL_RCC_GetI2SClockFreq(I2S0) == 24576000U);
     assert((I2S0->CLKD & 0xF0U) == 0x50U); /* /8 -> BCLK 3.072MHz -> 48k stereo/32. */
     uint32_t pll = RCC_PLL_AUDIO_CTRL;
@@ -524,17 +524,17 @@ static void test_i2s(void)
     assert(hi2s0.Lock == HAL_UNLOCKED && hi2s0.State == HAL_I2S_STATE_RESET);
     audio_stall = 0;
     assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
-    assert(Board_I2S0_Init(12345U, 16U) == HAL_ERROR);
+    assert(Test_I2S0_Init(12345U, 16U) == HAL_ERROR);
     const uint32_t rates[] = {8000U,   12000U, 16000U, 24000U, 32000U, 48000U, 96000U,
                               192000U, 11025U, 22050U, 44100U, 88200U, 176400U};
     const uint32_t codes[] = {10U, 9U, 8U, 7U, 6U, 5U, 3U, 2U, 9U, 7U, 5U, 3U, 2U};
     for (uint32_t i = 0U; i < sizeof(rates) / sizeof(rates[0]); ++i)
     {
-        assert(Board_I2S0_Init(rates[i], 16U) == HAL_OK);
+        assert(Test_I2S0_Init(rates[i], 16U) == HAL_OK);
         assert(((I2S0->CLKD >> 4) & 0xFU) == codes[i]);
         assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
     }
-    assert(Board_I2S0_Init(44100U, 24U) == HAL_OK);
+    assert(Test_I2S0_Init(44100U, 24U) == HAL_OK);
     assert(HAL_RCC_GetI2SClockFreq(I2S0) == 22579200U);
     assert(I2S0->FMT0 == 0x1F57U && (I2S0->CLKD & 0xF0U) == 0x50U);
     hi2s0.Init.Standard = I2S_STANDARD_MSB;
@@ -595,7 +595,7 @@ static void test_i2c_async(void)
 {
     async_model = 1;
     clear_twi_model();
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 1000U) == HAL_OK);
     uint8_t bytes[24];
     assert(HAL_I2C_Mem_Read_IT(&hi2c1, 0x76U << 1, 0x88U, 1U, bytes, sizeof(bytes)) == HAL_OK);
@@ -639,12 +639,12 @@ static void test_i2c_async(void)
     assert(errors == 3U && hi2c1.ErrorCode == HAL_I2C_ERROR_TIMEOUT);
     assert(hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_Master_Receive_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
     assert(HAL_I2C_Abort(&hi2c1) == HAL_OK);
     assert(errors == 4U && hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 1000U) == HAL_OK);
     static DMA_HandleTypeDef rx = {.Init = {8U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_TWI1}};
     static DMA_HandleTypeDef tx = {.Init = {1U, DMA_MEMORY_TO_PERIPH, DMA_REQUEST_TWI1}};
@@ -711,7 +711,7 @@ static void test_i2c_async(void)
     assert(errors == residual_errors + 1U && completed == residual_completed);
     assert(hi2c1.ErrorCode == HAL_I2C_ERROR_DMA && hi2c1.State == HAL_I2C_STATE_RESET);
     I2C1->DRV_FIFO_CON = 0U;
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     clear_twi_model();
     assert(HAL_I2C_Master_Transmit_DMA(&hi2c1, 0xECU, buffer, 48U) == HAL_OK);
     model_dma_run(&tx);
@@ -724,18 +724,18 @@ static void test_i2c_async(void)
     HAL_I2C_Process(&hi2c1);
     assert(hi2c1.ErrorCode == HAL_I2C_ERROR_AF && rx.State == HAL_DMA_STATE_READY);
     assert(hi2c1.State == HAL_I2C_STATE_RESET);
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     tick = UINT32_MAX - 3U;
     assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 5U) == HAL_OK);
     assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
     pump_i2c(); /* Neither controller nor DMA completes. */
     assert(hi2c1.ErrorCode == HAL_I2C_ERROR_TIMEOUT && rx.State == HAL_DMA_STATE_READY);
     assert(DMA->CHANNEL[8].EN == 0U);
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 65536U) == HAL_ERROR);
     assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, (void *)0xFFFFFFFEU, 6U) == HAL_ERROR);
     assert(hi2c1.Lock == HAL_UNLOCKED);
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
     uint32_t before_errors = errors;
     DMA->STATUS |= 1U << 8;
@@ -745,7 +745,7 @@ static void test_i2c_async(void)
     DMA->STATUS &= ~(1U << 8);
     HAL_I2C_Process(&hi2c1);
     assert(hi2c1.State == HAL_I2C_STATE_RESET && errors == before_errors + 1U);
-    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(Test_I2C1_Init(100000U) == HAL_OK);
     assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
     DMA->CHANNEL[8].LEFT = 3U; /* Queue completion with partial data is an error. */
     DMA->IRQ_PEND[1] |= 4U;

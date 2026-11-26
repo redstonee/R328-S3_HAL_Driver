@@ -43,6 +43,17 @@ HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *d
                                     uint32_t timeout);
 HAL_StatusTypeDef HAL_UART_Receive(UART_HandleTypeDef *handle, uint8_t *data, uint32_t size,
                                    uint32_t timeout);
+/* Optional polling text output. Explicit handle; no UART/pin initialization.
+ * One lock/deadline per call. Hex is eight uppercase digits without 0x.
+ * PrintValue appends CRLF; HexDump writes spaced bytes followed by CRLF. */
+HAL_StatusTypeDef HAL_UART_PrintString(UART_HandleTypeDef *handle, const char *text,
+                                       uint32_t timeout);
+HAL_StatusTypeDef HAL_UART_PrintU32(UART_HandleTypeDef *handle, uint32_t value, uint32_t timeout);
+HAL_StatusTypeDef HAL_UART_PrintHex(UART_HandleTypeDef *handle, uint32_t value, uint32_t timeout);
+HAL_StatusTypeDef HAL_UART_PrintValue(UART_HandleTypeDef *handle, const char *label, uint32_t value,
+                                      uint32_t timeout);
+HAL_StatusTypeDef HAL_UART_HexDump(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
+                                   uint32_t timeout);
 void HAL_UART_MspInit(UART_HandleTypeDef *handle);
 void HAL_UART_MspDeInit(UART_HandleTypeDef *handle);
 #endif

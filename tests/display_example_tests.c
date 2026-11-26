@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <stdio.h>
 
-SPI_HandleTypeDef hspi1;
 static uint32_t gpio_h = UINT32_MAX;
 static uint32_t pen_down;
 static uint32_t tx_calls, fail_tx, touch_calls, fail_touch;
@@ -18,12 +17,12 @@ static uint32_t x_samples, y_samples;
 static uint32_t pending_transfer, it_calls, dma_calls, callback_error;
 static uint32_t fail_rate_change, rate_changes;
 
-static Board_SPI_Device selected(void)
+static Display_SPI_Device selected(void)
 {
     uint32_t lcd = (gpio_h & GPIO_PIN_4) == 0U;
     uint32_t touch = (gpio_h & GPIO_PIN_8) == 0U;
     assert(!(lcd && touch));
-    return lcd != 0U ? BOARD_SPI_LCD : touch != 0U ? BOARD_SPI_TOUCH : BOARD_SPI_NONE;
+    return lcd != 0U ? DISPLAY_SPI_LCD : touch != 0U ? DISPLAY_SPI_TOUCH : DISPLAY_SPI_NONE;
 }
 void HAL_GPIO_WritePin(GPIO_TypeDef *port, uint32_t pins, GPIO_PinState state)
 {
@@ -47,6 +46,10 @@ void HAL_GPIO_WritePin(GPIO_TypeDef *port, uint32_t pins, GPIO_PinState state)
 HAL_StatusTypeDef HAL_GPIO_Init(GPIO_TypeDef *port, const GPIO_InitTypeDef *pins)
 {
     assert((port == GPIOH && pins->Pin == (GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_9)) ||
+           (port == GPIOH && pins->Pin == (GPIO_PIN_4 | GPIO_PIN_8) &&
+            pins->Mode == GPIO_MODE_OUTPUT_PP) ||
+           (port == GPIOH && pins->Pin == (GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7) &&
+            pins->Mode == GPIO_MODE_AF_PP && pins->Alternate == 3U) ||
            (port == GPIOB && pins->Pin == GPIO_PIN_13 && pins->Mode == GPIO_MODE_INPUT));
     return HAL_OK;
 }
@@ -59,22 +62,19 @@ void HAL_Delay(uint32_t ms)
 {
     (void)ms;
 }
-HAL_StatusTypeDef Board_SPI1_Init(uint32_t hz)
+HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *h)
 {
-    assert(hz == ILI9341_SPI_HZ && selected() == BOARD_SPI_NONE);
-    hspi1.Instance = SPI1;
-    hspi1.State = HAL_SPI_STATE_READY;
-    hspi1.ActualBaudRateHz = hz;
-    hspi1.Init = (SPI_InitTypeDef){.CLKPolarity = SPI_POLARITY_LOW,
-                                   .CLKPhase = SPI_PHASE_1EDGE,
-                                   .NSS = SPI_NSS_SOFT,
-                                   .FirstBit = SPI_FIRSTBIT_MSB,
-                                   .BaudRateHz = hz};
-    return Board_SPI1_Select(BOARD_SPI_NONE);
+    assert(h == &hspi1 && h->Init.BaudRateHz == ILI9341_SPI_HZ && selected() == DISPLAY_SPI_NONE);
+    assert(h->Init.Mode == SPI_MODE_MASTER && h->Init.DataSize == SPI_DATASIZE_8BIT);
+    h->State = HAL_SPI_STATE_READY;
+    h->Lock = HAL_UNLOCKED;
+    h->ErrorCode = 0U;
+    h->ActualBaudRateHz = h->Init.BaudRateHz;
+    return HAL_OK;
 }
 HAL_StatusTypeDef HAL_SPI_SetBaudRate(SPI_HandleTypeDef *handle, uint32_t hz)
 {
-    assert(handle == &hspi1 && selected() == BOARD_SPI_NONE && pending_transfer == 0U);
+    assert(handle == &hspi1 && selected() == DISPLAY_SPI_NONE && pending_transfer == 0U);
     assert(handle->State == HAL_SPI_STATE_READY);
     assert(hz == ILI9341_SPI_HZ || hz == XPT2046_SPI_HZ);
     ++rate_changes;
@@ -86,20 +86,10 @@ HAL_StatusTypeDef HAL_SPI_SetBaudRate(SPI_HandleTypeDef *handle, uint32_t hz)
     handle->ActualBaudRateHz = hz;
     return HAL_OK;
 }
-HAL_StatusTypeDef Board_SPI1_Select(Board_SPI_Device device)
-{
-    assert(device == BOARD_SPI_NONE || hspi1.State == HAL_SPI_STATE_READY);
-    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4 | GPIO_PIN_8, GPIO_PIN_SET);
-    if (device != BOARD_SPI_NONE)
-    {
-        HAL_GPIO_WritePin(GPIOH, device == BOARD_SPI_LCD ? GPIO_PIN_4 : GPIO_PIN_8, GPIO_PIN_RESET);
-    }
-    return HAL_OK;
-}
 HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
                                    uint32_t timeout)
 {
-    assert(handle == &hspi1 && selected() == BOARD_SPI_LCD && timeout != 0U);
+    assert(handle == &hspi1 && selected() == DISPLAY_SPI_LCD && timeout != 0U);
     assert(handle->ActualBaudRateHz == ILI9341_SPI_HZ);
     ++tx_calls;
     if (tx_calls == fail_tx)
@@ -166,7 +156,7 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *dat
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *handle, const uint8_t *tx, uint8_t *rx,
                                           uint32_t size, uint32_t timeout)
 {
-    assert(handle == &hspi1 && selected() == BOARD_SPI_TOUCH && size == 3U && timeout != 0U);
+    assert(handle == &hspi1 && selected() == DISPLAY_SPI_TOUCH && size == 3U && timeout != 0U);
     assert(handle->ActualBaudRateHz == XPT2046_SPI_HZ);
     assert(tx[0] == 0xD0U || tx[0] == 0x90U); /* PD=00, 12-bit differential. */
     assert(tx[1] == 0U && tx[2] == 0U);
@@ -235,7 +225,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *h, const uint8_
 }
 void HAL_SPI_Process(SPI_HandleTypeDef *h)
 {
-    assert(h == &hspi1 && h->State == HAL_SPI_STATE_BUSY && selected() != BOARD_SPI_NONE);
+    assert(h == &hspi1 && h->State == HAL_SPI_STATE_BUSY && selected() != DISPLAY_SPI_NONE);
     uint32_t kind = pending_transfer;
     pending_transfer = 0U;
     h->Lock = HAL_UNLOCKED;
@@ -261,10 +251,11 @@ int main(void)
     XPT2046_Point point;
     assert(ILI9341_Fill(ILI9341_RED) == HAL_ERROR);
     assert(XPT2046_ReadRaw(&point) == HAL_ERROR && point.pressed == 0U);
+    assert(Display_SPI_Init() == HAL_OK);
     assert(ILI9341_Init() == HAL_OK);
     assert(lcd_pixel_bytes == 240U * 320U * 2U && pixel_color == ILI9341_BLACK);
-    assert((gpio_h & GPIO_PIN_9) != 0U && selected() == BOARD_SPI_NONE);
-    assert(XPT2046_Init() == HAL_OK && selected() == BOARD_SPI_NONE);
+    assert((gpio_h & GPIO_PIN_9) != 0U && selected() == DISPLAY_SPI_NONE);
+    assert(XPT2046_Init() == HAL_OK && selected() == DISPLAY_SPI_NONE);
     assert(Display_SPI_Init() == HAL_OK);
 
     uint32_t before = tx_calls;
@@ -275,7 +266,7 @@ int main(void)
     assert(ILI9341_FillRect(238U, 318U, UINT16_MAX, UINT16_MAX, 0x1234U) == HAL_OK);
     assert(lcd_pixel_bytes - bytes_before == 8U && pixel_color == 0x1234U);
     assert(column_start == 238U && column_end == 239U && row_start == 318U && row_end == 319U);
-    assert(selected() == BOARD_SPI_NONE);
+    assert(selected() == DISPLAY_SPI_NONE);
 
     before = touch_calls;
     assert(XPT2046_ReadRaw(&point) == HAL_OK && point.pressed == 0U);
@@ -284,26 +275,26 @@ int main(void)
     x_samples = 0U;
     y_samples = 0U;
     assert(XPT2046_ReadRaw(&point) == HAL_OK && point.pressed != 0U);
-    assert(point.x == 1001U && point.y == 3000U && selected() == BOARD_SPI_NONE);
+    assert(point.x == 1001U && point.y == 3000U && selected() == DISPLAY_SPI_NONE);
     assert(ILI9341_FillRect(10U, 10U, 5U, 5U, ILI9341_WHITE) == HAL_OK);
-    assert(selected() == BOARD_SPI_NONE); /* Switch back from touch to LCD. */
+    assert(selected() == DISPLAY_SPI_NONE); /* Switch back from touch to LCD. */
     for (uint32_t mode = DISPLAY_SPI_POLLING; mode <= DISPLAY_SPI_DMA; ++mode)
     {
         assert(Display_SPI_SetMode((Display_SPI_Mode)mode) == HAL_OK);
         assert(ILI9341_FillRect(0U, 0U, 20U, 20U, ILI9341_GREEN) == HAL_OK);
         x_samples = y_samples = 0U;
         assert(XPT2046_ReadRaw(&point) == HAL_OK && point.pressed != 0U);
-        assert(point.x == 1001U && point.y == 3000U && selected() == BOARD_SPI_NONE);
+        assert(point.x == 1001U && point.y == 3000U && selected() == DISPLAY_SPI_NONE);
     }
     assert(it_calls != 0U && dma_calls != 0U);
     assert(rate_changes != 0U);
     assert(ILI9341_FillRect(0U, 0U, 1U, 1U, ILI9341_GREEN) == HAL_OK);
     fail_rate_change = 1U;
-    assert(XPT2046_ReadRaw(&point) == HAL_TIMEOUT && selected() == BOARD_SPI_NONE);
+    assert(XPT2046_ReadRaw(&point) == HAL_TIMEOUT && selected() == DISPLAY_SPI_NONE);
     assert(hspi1.ActualBaudRateHz == ILI9341_SPI_HZ);
     fail_rate_change = 0U;
-    assert(XPT2046_ReadRaw(&point) == HAL_OK && selected() == BOARD_SPI_NONE);
-    assert(Display_SPI_Select((Board_SPI_Device)99U) == HAL_ERROR);
+    assert(XPT2046_ReadRaw(&point) == HAL_OK && selected() == DISPLAY_SPI_NONE);
+    assert(Display_SPI_Select((Display_SPI_Device)99U) == HAL_ERROR);
     assert(Display_SPI_SetMode((Display_SPI_Mode)99U) == HAL_ERROR);
     hspi1.State = HAL_SPI_STATE_BUSY;
     assert(Display_SPI_SetMode(DISPLAY_SPI_POLLING) == HAL_BUSY);
@@ -319,21 +310,26 @@ int main(void)
     assert(x == 239U && y == 319U);
 
     callback_error = 1U;
-    assert(XPT2046_ReadRaw(&point) == HAL_TIMEOUT && selected() == BOARD_SPI_NONE);
+    assert(XPT2046_ReadRaw(&point) == HAL_TIMEOUT && selected() == DISPLAY_SPI_NONE);
     callback_error = 0U;
+    assert(Display_SPI_Init() == HAL_OK);
+    assert(Display_SPI_SetMode(DISPLAY_SPI_DMA) == HAL_OK);
     assert(ILI9341_Init() == HAL_OK && XPT2046_Init() == HAL_OK);
 
     /* A FIFO/timeout failure must release CS and propagate the original error. */
     fail_touch = touch_calls + 3U;
     assert(XPT2046_ReadRaw(&point) == HAL_TIMEOUT && point.pressed == 0U);
-    assert(selected() == BOARD_SPI_NONE);
+    assert(selected() == DISPLAY_SPI_NONE);
     fail_touch = 0U;
+    assert(Display_SPI_Init() == HAL_OK);
+    assert(Display_SPI_SetMode(DISPLAY_SPI_DMA) == HAL_OK);
     assert(ILI9341_Init() == HAL_OK && XPT2046_Init() == HAL_OK);
     fail_tx = tx_calls + 6U; /* First pixel burst, after CASET/PASET/RAMWR. */
-    assert(ILI9341_Fill(ILI9341_BLUE) == HAL_TIMEOUT && selected() == BOARD_SPI_NONE);
+    assert(ILI9341_Fill(ILI9341_BLUE) == HAL_TIMEOUT && selected() == DISPLAY_SPI_NONE);
     fail_tx = tx_calls + 1U;
+    assert(Display_SPI_Init() == HAL_OK);
     assert(ILI9341_Init() == HAL_TIMEOUT);
-    assert(selected() == BOARD_SPI_NONE && (gpio_h & GPIO_PIN_9) == 0U);
+    assert(selected() == DISPLAY_SPI_NONE && (gpio_h & GPIO_PIN_9) == 0U);
     puts("LCD/touch shared SPI protocol checks passed");
     return 0;
 }

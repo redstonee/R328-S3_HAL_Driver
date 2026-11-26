@@ -24,7 +24,7 @@ python3 -m pip install -r tools/requirements-format.txt
 从工程根目录格式化，下面的文件枚举使用 ripgrep：
 
 ```sh
-rg --files -0 -g '*.c' -g '*.h' Core BSP Drivers boot example tests | xargs -0 clang-format -i
+rg --files -0 -g '*.c' -g '*.h' Core Drivers boot example tests | xargs -0 clang-format -i
 ruff format tools tests
 cmake-format -i CMakeLists.txt tests/CMakeLists.txt cmake/arm-none-eabi.cmake
 ```
@@ -32,7 +32,7 @@ cmake-format -i CMakeLists.txt tests/CMakeLists.txt cmake/arm-none-eabi.cmake
 检查格式而不改文件：
 
 ```sh
-rg --files -0 -g '*.c' -g '*.h' Core BSP Drivers boot example tests | xargs -0 clang-format --dry-run --Werror
+rg --files -0 -g '*.c' -g '*.h' Core Drivers boot example tests | xargs -0 clang-format --dry-run --Werror
 ruff format --check tools tests
 cmake-format --check CMakeLists.txt tests/CMakeLists.txt cmake/arm-none-eabi.cmake
 ```

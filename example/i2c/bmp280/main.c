@@ -1,5 +1,86 @@
-#include "example.h"
+#include "main.h"
 #include "bmp280.h"
+
+#define UART_TIMEOUT_MS 100U
+static UART_HandleTypeDef huart0;
+volatile uint32_t g_application_error;
+
+void Error_Handler(void)
+{
+    g_application_error = 1U;
+    R328_IRQ_Disable();
+    for (;;)
+    {
+        R328_WFI();
+    }
+}
+void SystemClock_Config(void)
+{
+    if (HAL_RCC_APB2_Config24M() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemCoreClockUpdate();
+}
+static void require_ok(const char *label, HAL_StatusTypeDef status)
+{
+    if (status != HAL_OK)
+    {
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        Error_Handler();
+    }
+}
+static void app_init(const char *banner)
+{
+    if (HAL_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    SystemClock_Config();
+    /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
+     * The framework itself does not reserve any UART or initialize these pins. */
+    GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
+                                  .Mode = GPIO_MODE_AF_PP,
+                                  .Pull = GPIO_PULLUP,
+                                  .Drive = GPIO_DRIVE_LEVEL1,
+                                  .Alternate = 3U};
+    if (HAL_GPIO_Init(GPIOH, &uart_pins) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    huart0.Instance = UART0;
+    huart0.Init =
+        (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
+    require_ok("UART init=", HAL_UART_Init(&huart0));
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
+                               UART_TIMEOUT_MS);
+}
+
+static I2C_HandleTypeDef hi2c1;
+static HAL_StatusTypeDef i2c_init(uint32_t clock_speed)
+{
+    if (hi2c1.State == HAL_I2C_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
+    /* PB8 SCL / PB9 SDA, AF4. The TWI function controls open-drain output. */
+    GPIO_InitTypeDef pins = {.Pin = GPIO_PIN_8 | GPIO_PIN_9,
+                             .Mode = GPIO_MODE_AF_PP,
+                             .Pull = GPIO_PULLUP,
+                             .Drive = GPIO_DRIVE_LEVEL1,
+                             .Alternate = 4U};
+    HAL_StatusTypeDef status = HAL_GPIO_Init(GPIOB, &pins);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+    hi2c1.Instance = I2C1;
+    hi2c1.Init =
+        (I2C_InitTypeDef){.ClockSpeed = clock_speed, .AddressingMode = I2C_ADDRESSINGMODE_7BIT};
+    return HAL_I2C_Init(&hi2c1);
+}
 
 #define BMP280_I2C_CLOCK_HZ 100000U
 #define BMP280_I2C_TIMEOUT_MS 100U
@@ -85,11 +166,11 @@ static int check(HAL_StatusTypeDef result)
     {
         return 1;
     }
-    Example_Report("BMP280 transfer=", result);
-    Example_PrintValue("I2C ErrorCode=", hi2c1.ErrorCode);
+    HAL_UART_PrintValue(&huart0, "BMP280 transfer=", result, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "I2C ErrorCode=", hi2c1.ErrorCode, UART_TIMEOUT_MS);
     if (hi2c1.State == HAL_I2C_STATE_RESET)
     {
-        Example_RequireOK("I2C reinit=", Board_I2C1_Init(BMP280_I2C_CLOCK_HZ));
+        require_ok("I2C reinit=", i2c_init(BMP280_I2C_CLOCK_HZ));
     }
     return 0;
 }
@@ -99,10 +180,11 @@ static int sensor_init(void)
     {
         return 0;
     }
-    Example_PrintValue("chip ID=", chip_id);
+    HAL_UART_PrintValue(&huart0, "chip ID=", chip_id, UART_TIMEOUT_MS);
     if (chip_id != BMP280_CHIP_ID)
     {
-        (void)Board_ConsoleWrite("Expected BMP280 ID 0x58 at address 0x76.\r\n");
+        (void)HAL_UART_PrintString(&huart0, "Expected BMP280 ID 0x58 at address 0x76.\r\n",
+                                   UART_TIMEOUT_MS);
         return 0;
     }
     command = BMP280_RESET_COMMAND;
@@ -133,7 +215,7 @@ static int sensor_init(void)
     }
     if (!BMP280_DecodeCalibration(&calibration, registers))
     {
-        (void)Board_ConsoleWrite("Invalid calibration.\r\n");
+        (void)HAL_UART_PrintString(&huart0, "Invalid calibration.\r\n", UART_TIMEOUT_MS);
         return 0;
     }
     command = BMP280_CONFIG_FILTER_OFF | BMP280_CONFIG_SPI3W_DISABLE;
@@ -157,7 +239,7 @@ static void measure(void)
     }
     if ((status_byte & BMP280_STATUS_MEASURING) != 0U)
     {
-        (void)Board_ConsoleWrite("BMP280 still measuring; retry.\r\n");
+        (void)HAL_UART_PrintString(&huart0, "BMP280 still measuring; retry.\r\n", UART_TIMEOUT_MS);
         return;
     }
     uint32_t start = HAL_GetTick();
@@ -165,41 +247,42 @@ static void measure(void)
     {
         return;
     }
-    Example_PrintValue("sample read ms=", HAL_GetTick() - start);
+    HAL_UART_PrintValue(&huart0, "sample read ms=", HAL_GetTick() - start, UART_TIMEOUT_MS);
     int32_t temperature;
     uint32_t pressure;
     if (!BMP280_Compensate(&calibration, registers, &temperature, &pressure))
     {
-        (void)Board_ConsoleWrite("Invalid sample/calibration.\r\n");
-        Example_Dump(registers, BMP280_SAMPLE_SIZE);
+        (void)HAL_UART_PrintString(&huart0, "Invalid sample/calibration.\r\n", UART_TIMEOUT_MS);
+        HAL_UART_HexDump(&huart0, registers, BMP280_SAMPLE_SIZE, UART_TIMEOUT_MS);
         return;
     }
-    (void)Board_ConsoleWrite("Temperature C=");
+    (void)HAL_UART_PrintString(&huart0, "Temperature C=", UART_TIMEOUT_MS);
     uint32_t magnitude = (uint32_t)(temperature < 0 ? -temperature : temperature);
     if (temperature < 0)
     {
-        (void)Board_ConsoleWrite("-");
+        (void)HAL_UART_PrintString(&huart0, "-", UART_TIMEOUT_MS);
     }
-    (void)Board_ConsoleWriteU32(magnitude / BMP280_TEMPERATURE_SCALE);
-    (void)Board_ConsoleWrite(".");
+    (void)HAL_UART_PrintU32(&huart0, magnitude / BMP280_TEMPERATURE_SCALE, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, ".", UART_TIMEOUT_MS);
     if (magnitude % BMP280_TEMPERATURE_SCALE < 10U)
     {
-        (void)Board_ConsoleWrite("0");
+        (void)HAL_UART_PrintString(&huart0, "0", UART_TIMEOUT_MS);
     }
-    (void)Board_ConsoleWriteU32(magnitude % BMP280_TEMPERATURE_SCALE);
-    (void)Board_ConsoleWrite("\r\n");
-    Example_PrintValue("Pressure Pa=", pressure);
-    Example_PrintValue("callback complete=", completed);
+    (void)HAL_UART_PrintU32(&huart0, magnitude % BMP280_TEMPERATURE_SCALE, UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "Pressure Pa=", pressure, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "callback complete=", completed, UART_TIMEOUT_MS);
 }
 int main(void)
 {
-    Example_Init("I2C1 / BMP280 PB8 SCL, PB9 SDA, address 0x76");
-    Example_RequireOK("I2C init=", Board_I2C1_Init(BMP280_I2C_CLOCK_HZ));
-    Example_RequireOK("TX DMA init=", HAL_DMA_Init(&tx_dma));
-    Example_RequireOK("RX DMA init=", HAL_DMA_Init(&rx_dma));
+    app_init("I2C1 / BMP280 PB8 SCL, PB9 SDA, address 0x76");
+    require_ok("I2C init=", i2c_init(BMP280_I2C_CLOCK_HZ));
+    require_ok("TX DMA init=", HAL_DMA_Init(&tx_dma));
+    require_ok("RX DMA init=", HAL_DMA_Init(&rx_dma));
     hi2c1.hdmatx = &tx_dma;
     hi2c1.hdmarx = &rx_dma;
-    (void)Board_ConsoleWrite("p=polling, i=interrupt, d=DMA; each command measures once.\r\n");
+    (void)HAL_UART_PrintString(
+        &huart0, "p=polling, i=interrupt, d=DMA; each command measures once.\r\n", UART_TIMEOUT_MS);
     for (;;)
     {
         HAL_I2C_Process(&hi2c1);
@@ -211,9 +294,11 @@ int main(void)
         if (byte == 'p' || byte == 'i' || byte == 'd')
         {
             mode = byte;
-            (void)Board_ConsoleWrite(byte == 'p'   ? "Mode=polling\r\n"
-                                     : byte == 'i' ? "Mode=interrupt\r\n"
-                                                   : "Mode=DMA\r\n");
+            (void)HAL_UART_PrintString(&huart0,
+                                       byte == 'p'   ? "Mode=polling\r\n"
+                                       : byte == 'i' ? "Mode=interrupt\r\n"
+                                                     : "Mode=DMA\r\n",
+                                       UART_TIMEOUT_MS);
             measure();
         }
     }

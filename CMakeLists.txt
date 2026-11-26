@@ -21,11 +21,11 @@ set(R328_MEMORY
     CACHE STRING "Execution memory: SRAM or DDR (already initialized)"
 )
 set_property(CACHE R328_MEMORY PROPERTY STRINGS SRAM DDR)
-set(R328_UART0_ROUTE
+set(R328_BOOT_UART0_ROUTE
     PH0_PH1
-    CACHE STRING "UART0 pin route"
+    CACHE STRING "Flash boot0 UART0 pin route (application configures its own UART)"
 )
-set_property(CACHE R328_UART0_ROUTE PROPERTY STRINGS PB8_PB9 PH0_PH1)
+set_property(CACHE R328_BOOT_UART0_ROUTE PROPERTY STRINGS PB8_PB9 PH0_PH1)
 set(R328_GIC_SECURITY
     SECURE
     CACHE STRING "Execution security state: SECURE or NONSECURE"
@@ -88,8 +88,8 @@ elseif(R328_MEMORY STREQUAL "DDR")
 else()
     message(FATAL_ERROR "R328_MEMORY must be SRAM or DDR")
 endif()
-if(NOT R328_UART0_ROUTE MATCHES "^(PB8_PB9|PH0_PH1)$")
-    message(FATAL_ERROR "R328_UART0_ROUTE must be PB8_PB9 or PH0_PH1")
+if(NOT R328_BOOT_UART0_ROUTE MATCHES "^(PB8_PB9|PH0_PH1)$")
+    message(FATAL_ERROR "R328_BOOT_UART0_ROUTE must be PB8_PB9 or PH0_PH1")
 endif()
 if(NOT R328_GIC_SECURITY MATCHES "^(SECURE|NONSECURE)$")
     message(FATAL_ERROR "R328_GIC_SECURITY must be SECURE or NONSECURE")
@@ -134,9 +134,8 @@ target_compile_options(
               $<$<CONFIG:Debug>:-Og;-g3>
 )
 target_include_directories(
-    r328_options INTERFACE Core/Inc BSP/Inc Drivers/Device/Include Drivers/R328_HAL_Driver/Inc
+    r328_options INTERFACE Core/Inc Drivers/Device/Include Drivers/R328_HAL_Driver/Inc
 )
-target_compile_definitions(r328_options INTERFACE R328_UART0_ROUTE_${R328_UART0_ROUTE}=1)
 if(R328_GIC_SECURITY STREQUAL "NONSECURE")
     target_compile_definitions(r328_options INTERFACE R328_GIC_NONSECURE=1)
 endif()
@@ -164,10 +163,7 @@ target_link_libraries(r328_hal PUBLIC r328_options)
 
 # Pick up application sources copied into Core/Src, including device drivers.
 file(GLOB core_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/*.c")
-add_executable(
-    firmware Core/Startup/startup_r328.S ${core_sources} BSP/Src/board.c BSP/Src/board_bus.c
-             BSP/Src/board_ledc.c
-)
+add_executable(firmware Core/Startup/startup_r328.S ${core_sources})
 set_target_properties(
     firmware PROPERTIES SUFFIX ".elf" LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/r328_ram.ld
 )
@@ -228,8 +224,8 @@ if(R328_NAND_IMAGE)
         "${CMAKE_CURRENT_BINARY_DIR}/firmware.bin"
         --elf
         $<TARGET_FILE:firmware>
-        --uart0-route
-        "${R328_UART0_ROUTE}"
+        --boot-uart0-route
+        "${R328_BOOT_UART0_ROUTE}"
         --output
         "${nand_image}"
         --package
@@ -427,8 +423,8 @@ if(R328_NOR_IMAGE)
         "${CMAKE_CURRENT_BINARY_DIR}/firmware.bin"
         --elf
         $<TARGET_FILE:firmware>
-        --uart0-route
-        "${R328_UART0_ROUTE}"
+        --boot-uart0-route
+        "${R328_BOOT_UART0_ROUTE}"
         --output
         "${nor_image}"
         --package
@@ -558,8 +554,8 @@ if(R328_FEL_IMAGE)
         COMMAND
             ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tools/fel_load.py" package --binary
             "${CMAKE_CURRENT_BINARY_DIR}/firmware.bin" --elf $<TARGET_FILE:firmware> --output
-            "${fel_binary}" --manifest "${fel_manifest}" --uart0-route "${R328_UART0_ROUTE}"
-            --profile "${R328_FEL_SRAM_PROFILE}" ${fel_loader_args}
+            "${fel_binary}" --manifest "${fel_manifest}" --profile "${R328_FEL_SRAM_PROFILE}"
+            ${fel_loader_args}
         DEPENDS ${fel_loader_deps} firmware "${CMAKE_CURRENT_SOURCE_DIR}/tools/fel_load.py"
         VERBATIM
     )
@@ -604,5 +600,5 @@ if(BUILD_TESTING)
 endif()
 message(
     STATUS
-        "R328: ${R328_MEMORY}, origin=${R328_RAM_ORIGIN}, size=${R328_RAM_LENGTH}, UART0=${R328_UART0_ROUTE}, GIC=${R328_GIC_SECURITY}"
+        "R328: ${R328_MEMORY}, origin=${R328_RAM_ORIGIN}, size=${R328_RAM_LENGTH}, GIC=${R328_GIC_SECURITY}"
 )

@@ -99,7 +99,7 @@ def build_image(boot0: bytes, profile: dict, reader: bytes, firmware: bytes, rou
         "package_length": len(package),
         "package_buffer": hex(TOC_BUFFER),
         "application_region": {"origin": hex(APP_ORIGIN), "length": APP_LENGTH},
-        "application_uart0_route": route,
+        "boot_uart0_route": route,
         "gic": "SECURE / Group 0",
         "ddr": profile["ddr"],
         "spi": {"controller": 0, "chip_select": 0, "clock_hz": 12000000, "read_opcode": 3},
@@ -133,7 +133,13 @@ def main() -> None:
         sub.add_argument("--reader-elf", type=Path, required=True)
         sub.add_argument("--firmware", type=Path, required=True)
         sub.add_argument("--elf", type=Path, required=True)
-        sub.add_argument("--uart0-route", default="PH0_PH1", choices=("PH0_PH1", "PB8_PB9"))
+        sub.add_argument(
+            "--boot-uart0-route",
+            "--uart0-route",
+            dest="uart0_route",
+            default="PH0_PH1",
+            choices=("PH0_PH1", "PB8_PB9"),
+        )
         sub.add_argument("--output", type=Path, required=True)
         sub.add_argument("--package", type=Path, required=True)
         sub.add_argument("--configured-boot0", type=Path, required=True)

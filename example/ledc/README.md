@@ -7,8 +7,6 @@
 先将自己的 `Core/Src/main.c` 备份到 `Core/Src/` 以外，再从工程根目录执行：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/ledc/ws2812/main.c Core/Src/main.c
 cmake --preset fel-debug
 cmake --build --preset fel-debug
@@ -17,11 +15,11 @@ ctest --preset fel-debug
 cmake --build build/fel-debug --target fel-run
 ```
 
-xfel 不在 PATH 时，配置命令增加 `-DR328_XFEL=/absolute/path/to/xfel`。同一份应用也可使用 `nand-debug` 或 `nor-debug` 构建；预设只选择内存和加载方式，详见 [例程索引](../README.md)。恢复自己的应用时一并移出公共 `example.c`，避免重复的初始化与错误处理函数。
+xfel 不在 PATH 时，配置命令增加 `-DR328_XFEL=/absolute/path/to/xfel`。同一份应用也可使用 `nand-debug` 或 `nor-debug` 构建；预设只选择内存和加载方式，详见 [例程索引](../README.md)。恢复自己的应用时替换 `Core/Src/main.c` 即可。
 
 ## 连接与灯效
 
-默认 MSP 配置位于 `Core/Src/r328_hal_msp.c`，灯数和封装初始化位于 `BSP/Inc/board.h`、`BSP/Src/board_ledc.c`。
+引脚、灯数和时序均配置在 `ws2812/main.c` 的 `ledc_init()` 与 `WS2812_LED_COUNT` 中。
 
 | 项目 | 默认值 |
 | --- | --- |
@@ -34,17 +32,17 @@ xfel 不在 PATH 时，配置命令增加 `-DR328_XFEL=/absolute/path/to/xfel`�
 | 1 码 | 高约 958 ns，低约 292 ns |
 | 帧复位低电平 | 300 µs |
 
-测试亮度限制在 32/255 以内。流水顺序按数据链定义，不按器件编号递增。迁移到其他灯链时，同步修改 MSP、`BOARD_WS2812_LED_COUNT` 和初始化时序。
+测试亮度限制在 32/255 以内。流水顺序按数据链定义，不按器件编号递增。迁移到其他灯链时，同步修改 GPIO 配置、`WS2812_LED_COUNT` 和初始化时序。
 
 ## 调用方式
 
 ```c
-uint32_t pixels[BOARD_WS2812_LED_COUNT] = {0};
-HAL_StatusTypeDef status = Board_LEDC_Init(BOARD_WS2812_LED_COUNT);
+uint32_t pixels[WS2812_LED_COUNT] = {0};
+HAL_StatusTypeDef status = ledc_init(WS2812_LED_COUNT);
 if (status == HAL_OK)
 {
     pixels[0] = HAL_LEDC_ColorRGB(16U, 0U, 0U);
-    status = HAL_LEDC_Transmit(&hledc, pixels, BOARD_WS2812_LED_COUNT, 100U);
+    status = HAL_LEDC_Transmit(&hledc, pixels, WS2812_LED_COUNT, 100U);
 }
 ```
 

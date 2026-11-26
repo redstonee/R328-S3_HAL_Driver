@@ -12,6 +12,106 @@ uint32_t HAL_GetTick(void)
     return fake_tick++;
 }
 
+/* UART output is captured per explicit handle; optional FIFO stalls advance
+ * the fake tick and exercise one deadline across formatting fragments. */
+static UART_HandleTypeDef *printed_uart;
+static uint8_t printed[256];
+static uint32_t printed_size, fifo_stalls, fifo_reads;
+uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
+{
+    if (printed_uart != NULL && reg == &printed_uart->Instance->USR && fifo_stalls != 0U)
+    {
+        if (fifo_reads++ < fifo_stalls)
+        {
+            return 0U;
+        }
+        fifo_reads = 0U;
+    }
+    return *reg;
+}
+void R328_HAL_TestWrite32(volatile uint32_t *reg, uint32_t value)
+{
+    if (printed_uart != NULL && reg == &printed_uart->Instance->DATA)
+    {
+        assert(printed_uart->Lock == HAL_LOCKED && printed_uart->State == HAL_UART_STATE_BUSY_TX);
+        assert(printed_size < sizeof(printed));
+        printed[printed_size++] = (uint8_t)value;
+    }
+    *reg = value;
+}
+static void expect_print(const char *expected)
+{
+    assert(printed_size == strlen(expected));
+    assert(memcmp(printed, expected, printed_size) == 0);
+    assert(printed_uart->Lock == HAL_UNLOCKED && printed_uart->State == HAL_UART_STATE_READY);
+    printed_size = 0U;
+}
+static void test_uart_print(void)
+{
+    UART_HandleTypeDef uart = {.Instance = UART1, .State = HAL_UART_STATE_READY};
+    printed_uart = &uart;
+    UART1->USR = 2U;
+    UART1->LSR = 1U << 6;
+    UART0->DATA = 0xA5U;
+    assert(HAL_UART_PrintString(&uart, "hello\r\n", 10U) == HAL_OK);
+    expect_print("hello\r\n");
+    assert(UART0->DATA == 0xA5U); /* Output must not implicitly use UART0. */
+    assert(HAL_UART_PrintString(&uart, "", 0U) == HAL_OK);
+    expect_print("");
+    const uint32_t values[] = {0U, 9U, 10U, UINT32_MAX};
+    const char *const expected[] = {"0", "9", "10", "4294967295"};
+    for (uint32_t i = 0U; i < 4U; ++i)
+    {
+        assert(HAL_UART_PrintU32(&uart, values[i], 10U) == HAL_OK);
+        expect_print(expected[i]);
+    }
+    assert(HAL_UART_PrintHex(&uart, 0x123ABU, 10U) == HAL_OK);
+    expect_print("000123AB");
+    assert(HAL_UART_PrintHex(&uart, UINT32_MAX, 10U) == HAL_OK);
+    expect_print("FFFFFFFF");
+    assert(HAL_UART_PrintValue(&uart, "tick=", UINT32_MAX, 10U) == HAL_OK);
+    expect_print("tick=4294967295\r\n");
+    uint8_t bytes[23];
+    for (uint32_t i = 0U; i < sizeof(bytes); ++i)
+    {
+        bytes[i] = (uint8_t)i;
+    }
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 10U) == HAL_OK);
+    expect_print("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 \r\n");
+    assert(HAL_UART_HexDump(&uart, NULL, 0U, 10U) == HAL_OK);
+    expect_print("\r\n");
+    assert(HAL_UART_PrintString(&uart, NULL, 10U) == HAL_ERROR);
+    assert(HAL_UART_PrintValue(&uart, NULL, 1U, 10U) == HAL_ERROR);
+    assert(HAL_UART_HexDump(&uart, NULL, 1U, 10U) == HAL_ERROR);
+    assert(HAL_UART_PrintHex(NULL, 1U, 10U) == HAL_ERROR);
+    uart.State = HAL_UART_STATE_RESET;
+    assert(HAL_UART_PrintU32(&uart, 1U, 10U) == HAL_ERROR);
+    uart.State = HAL_UART_STATE_READY;
+    uart.Lock = HAL_LOCKED;
+    assert(HAL_UART_PrintValue(&uart, "a", 1U, 10U) == HAL_BUSY);
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 10U) == HAL_BUSY);
+    assert(printed_size == 0U);
+    uart.Lock = HAL_UNLOCKED;
+    fifo_stalls = 2U;
+    fake_tick = UINT32_MAX - 2U;
+    assert(HAL_UART_PrintValue(&uart, "a", 1U, 5U) == HAL_TIMEOUT);
+    expect_print("a1"); /* CRLF must not get a fresh timeout. */
+    fifo_reads = 0U;
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 5U) == HAL_TIMEOUT);
+    expect_print("00");
+    fifo_reads = 0U;
+    fake_tick = 0U;
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 100U) == HAL_TIMEOUT);
+    /* The first 16-byte chunk consumes most of the deadline; the second
+     * chunk must not restart it. */
+    expect_print("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 1");
+    fifo_stalls = 0U;
+    UART1->LSR = 0U; /* Final shifter drain is part of the same timeout. */
+    assert(HAL_UART_PrintHex(&uart, 0U, 2U) == HAL_TIMEOUT);
+    expect_print("00000000");
+    printed_uart = NULL;
+}
+
 static void map_region(uintptr_t address, size_t size)
 {
     void *result = mmap((void *)address, size, PROT_READ | PROT_WRITE,
@@ -149,6 +249,7 @@ int main(void)
     map_region(0x05000000U, 0x1000U);
     test_gpio();
     test_uart();
+    test_uart_print();
     test_gic();
     test_timer();
     puts("GPIO / UART / GIC / TIM register logic passed (host model, not silicon)");

@@ -13,7 +13,7 @@
 | 电源 / 地 | 3.3 V / GND | VCC / VSS |
 | WP#、HOLD# | 板上拉高 | WP# / SIO2、HOLD# / SIO3 |
 
-使用 SPI0 / CS0、Mode 0、单线、12 MHz；UART0 保持 PH0 / PH1、115200 8N1。WP#、HOLD# 不应悬空。芯片容量 **128 MiB**，每页 2,048+64 字节，每块 64 页 / 128 KiB，共 1,024 块，`9Fh + dummy` 读出的 ID 为 `C2 12`。参数和指令依据 [Macronix E4AB 数据手册 Rev. 2.0](https://www.macronix.com/Lists/Datasheet/Attachments/9075/MX35LF1GE4AB,%203V,%201Gb,%20v2.0.pdf)。
+使用 SPI0 / CS0、Mode 0、单线、12 MHz；boot0 日志默认 PH0 / PH1、115200 8N1，应用自行配置 UART。WP#、HOLD# 不应悬空。芯片容量 **128 MiB**，每页 2,048+64 字节，每块 64 页 / 128 KiB，共 1,024 块，`9Fh + dummy` 读出的 ID 为 `C2 12`。参数和指令依据 [Macronix E4AB 数据手册 Rev. 2.0](https://www.macronix.com/Lists/Datasheet/Attachments/9075/MX35LF1GE4AB,%203V,%201Gb,%20v2.0.pdf)。
 
 ## 构建与烧写
 

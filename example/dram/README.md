@@ -15,8 +15,6 @@
 先把自己的 `Core/Src/main.c` 备份到 `Core/Src/` 以外，按 [例程索引](../README.md) 清理之前例程的附加文件。从工程根目录执行：
 
 ```sh
-cp example/common/example.c Core/Src/
-cp example/common/example.h Core/Inc/
 cp example/dram/memory/main.c Core/Src/main.c
 cmake --preset nand-debug
 cmake --build --preset nand-debug

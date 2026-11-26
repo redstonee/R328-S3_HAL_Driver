@@ -67,7 +67,7 @@ HAL_StatusTypeDef XPT2046_Init(void)
     {
         return status;
     }
-    status = Display_SPI_Select(BOARD_SPI_TOUCH);
+    status = Display_SPI_Select(DISPLAY_SPI_TOUCH);
     if (status != HAL_OK)
     {
         return status;
@@ -75,7 +75,7 @@ HAL_StatusTypeDef XPT2046_Init(void)
     uint16_t discarded;
     /* 12-bit, differential, PD1:0=00: internal reference off, PENIRQ enabled. */
     status = conversion(0x90U, &discarded);
-    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(DISPLAY_SPI_NONE);
     if (status == HAL_OK)
     {
         status = release;
@@ -101,7 +101,7 @@ HAL_StatusTypeDef XPT2046_ReadRaw(XPT2046_Point *point)
     {
         return HAL_OK;
     }
-    HAL_StatusTypeDef status = Display_SPI_Select(BOARD_SPI_TOUCH);
+    HAL_StatusTypeDef status = Display_SPI_Select(DISPLAY_SPI_TOUCH);
     if (status != HAL_OK)
     {
         return status;
@@ -113,7 +113,7 @@ HAL_StatusTypeDef XPT2046_ReadRaw(XPT2046_Point *point)
     {
         status = median_axis(0x90U, &point->y);
     }
-    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(DISPLAY_SPI_NONE);
     if (status == HAL_OK)
     {
         status = release;

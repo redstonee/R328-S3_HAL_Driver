@@ -31,7 +31,12 @@ class FELLoaderTests(unittest.TestCase):
         self.elf.write_bytes(header)
         self.manifest = root / "firmware-fel.json"
         self.output = root / "firmware-fel.bin"
-        tool.package(self.binary, self.elf, self.output, self.manifest, "PH0_PH1")
+        tool.package(self.binary, self.elf, self.output, self.manifest)
+
+    def test_manifest_does_not_reserve_uart(self):
+        report = json.loads(self.manifest.read_text())
+        self.assertNotIn("uart0_route", report)
+        self.assertNotIn("baud", report)
 
     def test_successful_sequence(self):
         commands = []
@@ -107,7 +112,7 @@ class FELLoaderTests(unittest.TestCase):
         struct.pack_into("<I", header, 24, 0x40800000)
         self.elf.write_bytes(header)
         with self.assertRaisesRegex(ValueError, "ELF entry"):
-            tool.package(self.binary, self.elf, self.output, self.manifest, "PH0_PH1")
+            tool.package(self.binary, self.elf, self.output, self.manifest)
         with self.assertRaisesRegex(ValueError, "exceeds"):
             tool.check_binary(bytes(tool.LENGTH))
 
@@ -131,7 +136,6 @@ class FullSRAMTests(FELLoaderTests):
             self.elf,
             self.output,
             self.manifest,
-            "PH0_PH1",
             "FULL",
             self.loader,
             self.loader_output,

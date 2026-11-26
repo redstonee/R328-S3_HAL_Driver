@@ -2,6 +2,31 @@
 #include "ili9341.h"
 #include "xpt2046.h"
 
+SPI_HandleTypeDef hspi1;
+
+static HAL_StatusTypeDef select_pins(Display_SPI_Device device)
+{
+    if (device != DISPLAY_SPI_NONE && device != DISPLAY_SPI_LCD && device != DISPLAY_SPI_TOUCH)
+    {
+        return HAL_ERROR;
+    }
+    if (hspi1.State == HAL_SPI_STATE_RESET && device != DISPLAY_SPI_NONE)
+    {
+        return HAL_ERROR;
+    }
+    if (HAL_TryLock(&hspi1.Lock) != HAL_OK)
+    {
+        return HAL_BUSY;
+    }
+    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4 | GPIO_PIN_8, GPIO_PIN_SET);
+    if (device != DISPLAY_SPI_NONE)
+    {
+        HAL_GPIO_WritePin(GPIOH, device == DISPLAY_SPI_LCD ? GPIO_PIN_4 : GPIO_PIN_8,
+                          GPIO_PIN_RESET);
+    }
+    HAL_Unlock(&hspi1.Lock);
+    return HAL_OK;
+}
 #define DISPLAY_TX_DMA_CHANNEL 0U
 #define DISPLAY_RX_DMA_CHANNEL 1U
 static DMA_HandleTypeDef tx_dma = {
@@ -11,13 +36,13 @@ static DMA_HandleTypeDef rx_dma = {
 static Display_SPI_Mode transfer_mode = DISPLAY_SPI_POLLING;
 static volatile uint32_t completed, failed;
 
-HAL_StatusTypeDef Display_SPI_Select(Board_SPI_Device device)
+HAL_StatusTypeDef Display_SPI_Select(Display_SPI_Device device)
 {
-    if (device == BOARD_SPI_NONE)
+    if (device == DISPLAY_SPI_NONE)
     {
-        return Board_SPI1_Select(device);
+        return select_pins(device);
     }
-    if (device != BOARD_SPI_LCD && device != BOARD_SPI_TOUCH)
+    if (device != DISPLAY_SPI_LCD && device != DISPLAY_SPI_TOUCH)
     {
         return HAL_ERROR;
     }
@@ -25,13 +50,13 @@ HAL_StatusTypeDef Display_SPI_Select(Board_SPI_Device device)
     {
         return hspi1.State == HAL_SPI_STATE_BUSY ? HAL_BUSY : HAL_ERROR;
     }
-    HAL_StatusTypeDef result = Board_SPI1_Select(BOARD_SPI_NONE);
-    uint32_t hz = device == BOARD_SPI_LCD ? ILI9341_SPI_HZ : XPT2046_SPI_HZ;
+    HAL_StatusTypeDef result = select_pins(DISPLAY_SPI_NONE);
+    uint32_t hz = device == DISPLAY_SPI_LCD ? ILI9341_SPI_HZ : XPT2046_SPI_HZ;
     if (result == HAL_OK && hspi1.Init.BaudRateHz != hz)
     {
         result = HAL_SPI_SetBaudRate(&hspi1, hz);
     }
-    return result == HAL_OK ? Board_SPI1_Select(device) : result;
+    return result == HAL_OK ? select_pins(device) : result;
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *h)
@@ -57,7 +82,44 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *h)
 }
 HAL_StatusTypeDef Display_SPI_Init(void)
 {
-    HAL_StatusTypeDef result = HAL_DMA_Init(&tx_dma);
+    if (hspi1.State == HAL_SPI_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
+    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4 | GPIO_PIN_8, GPIO_PIN_SET);
+    GPIO_InitTypeDef pins = {.Pin = GPIO_PIN_4 | GPIO_PIN_8,
+                             .Mode = GPIO_MODE_OUTPUT_PP,
+                             .Pull = GPIO_PULLUP,
+                             .Drive = GPIO_DRIVE_LEVEL1};
+    HAL_StatusTypeDef result = HAL_GPIO_Init(GPIOH, &pins);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    pins.Pin = GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
+    pins.Mode = GPIO_MODE_AF_PP;
+    pins.Pull = GPIO_NOPULL;
+    pins.Alternate = 3U;
+    result = HAL_GPIO_Init(GPIOH, &pins);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    hspi1.Instance = SPI1;
+    hspi1.Init = (SPI_InitTypeDef){.Mode = SPI_MODE_MASTER,
+                                   .DataSize = SPI_DATASIZE_8BIT,
+                                   .CLKPolarity = SPI_POLARITY_LOW,
+                                   .CLKPhase = SPI_PHASE_1EDGE,
+                                   .NSS = SPI_NSS_SOFT,
+                                   .BaudRateHz = ILI9341_SPI_HZ,
+                                   .FirstBit = SPI_FIRSTBIT_MSB,
+                                   .ChipSelect = 0U};
+    result = HAL_SPI_Init(&hspi1);
+    if (result != HAL_OK)
+    {
+        return result;
+    }
+    result = HAL_DMA_Init(&tx_dma);
     if (result == HAL_OK)
     {
         result = HAL_DMA_Init(&rx_dma);
@@ -80,7 +142,7 @@ HAL_StatusTypeDef Display_SPI_SetMode(Display_SPI_Mode mode)
     {
         return HAL_BUSY;
     }
-    HAL_StatusTypeDef result = Board_SPI1_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef result = select_pins(DISPLAY_SPI_NONE);
     if (result == HAL_OK)
     {
         transfer_mode = mode;

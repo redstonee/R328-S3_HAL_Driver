@@ -6,13 +6,13 @@
 | [input](input/main.c) | 上拉输入，仅在电平稳定 20 ms 后报告变化 |
 | [interrupt](interrupt/main.c) | 双边沿中断、事件记录、前台消抖；按 q 释放中断 |
 
-将所选 `main.c` 复制到 `Core/Src/`，将 `gpio_example.h` 复制到 `Core/Inc/`；公共文件和构建步骤见 [例程索引](../README.md)。
+将所选 `main.c` 复制到 `Core/Src/`，将 `gpio_example.h` 复制到 `Core/Inc/`；构建步骤见 [例程索引](../README.md)。
 
 ## 引脚与输入信号
 
 复制后的 `Core/Inc/gpio_example.h` 默认输出 PB6、输入 PB7。输出可接适当负载观察；输入可通过开关接地，上拉时释放为高电平。修改端口或引脚时同步检查复用冲突。
 
-PB6/PB7 同时连接普通蓝色 LED2 / 红色 LED3，均高电平点亮。`Board_Init()` 默认把两脚配置为输出并关闭灯，GPIO 例程随后重新配置所选引脚。PB7 上的 LED 负载会影响弱上拉输入测试，建议输入 / 中断例程改用未占用引脚；更改接线时同步修改 `gpio_example.h`。
+PB6/PB7 同时连接普通蓝色 LED2 / 红色 LED3，均高电平点亮。默认应用不初始化 LED；GPIO 例程按 `gpio_example.h` 配置所选引脚。PB7 上的 LED 负载会影响弱上拉输入测试，建议输入 / 中断例程改用未占用引脚；更改接线时同步修改 `gpio_example.h`。
 
 输入示例对候选电平进行稳定时间判断。中断示例使用真实 EINT，每个原始边沿均计数；前台等最后一个边沿后安静 20 ms 才报告当前电平。这是事件聚合，不把 raw edges 当作按键次数。
 

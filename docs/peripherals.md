@@ -1,28 +1,39 @@
 # SPI、I²C / TWI、I²S / IIS、LEDC
 
-接口采用 `Handle / Init / MspInit / HAL_StatusTypeDef`。先调用 `HAL_Init()` 建立时基，再配置 APB2 和控制台，之后按需初始化外设。每个控制器使用一个持续有效的句柄，仅供 CPU0 使用；轮询调用建议放在前台。
+接口采用 `Handle / Init / MspInit / HAL_StatusTypeDef`。先调用 `HAL_Init()` 建立时基，再配置所需时钟与 GPIO，之后按需初始化外设；UART 输出由应用选择。每个控制器使用一个持续有效的句柄，仅供 CPU0 使用；轮询调用建议放在前台。
 
 ## 初始化与引脚
 
-HAL 负责控制器寄存器，MSP 负责引脚复用。`BSP/` 提供例程使用的初始化封装，默认配置如下；实际接线变化时应同步修改 MSP 和设备控制引脚。
+HAL 负责控制器寄存器，应用负责句柄、时钟、引脚和初始化顺序。可在初始化外设前直接调用 `HAL_GPIO_Init()`，也可覆盖 HAL 的弱 `MspInit/MspDeInit` 钩子；`Core/Src/r328_hal_msp.c` 仅提供空的应用扩展位置，不预留任何 UART 或板载资源。
 
-| 接口 | 默认引脚 | 配置位置 |
+以下为例程选择的接线，不是 HAL 默认配置：
+
+| 接口 | 示例引脚 | 配置位置 |
 | --- | --- | --- |
-| UART0 TX / RX | PH0 / PH1，AF3 | `Core/Src/r328_hal_msp.c` |
-| SPI1 SCLK / MOSI / MISO | PH5 / PH6 / PH7，AF3 | `Core/Src/r328_hal_msp.c` |
-| SPI1 两路 GPIO CS | PH4 / PH8，低有效 | MSP 和 `BSP/Src/board_bus.c` |
-| TWI1 SCL / SDA | PB8 / PB9，AF4 | `Core/Src/r328_hal_msp.c` |
-| I²S0 LRCK / BCLK / DOUT0 | PB2 / PB3，AF5；PB4，AF4 | `Core/Src/r328_hal_msp.c` |
-| LEDC DO | PE2，AF2 | `Core/Src/r328_hal_msp.c` |
+| UART0 TX / RX | PH0 / PH1，AF3 | 各例程 `main.c` 的 `app_init()` |
+| SPI1 SCLK / MOSI / MISO | PH5 / PH6 / PH7，AF3 | SPI 例程 `main.c`；触屏为 `display_bus.c` |
+| SPI1 两路 GPIO CS | PH4 / PH8，低有效 | SPI 例程 `main.c`；触屏为 `display_bus.c` |
+| TWI1 SCL / SDA | PB8 / PB9，AF4 | I²C 例程 `main.c` 的 `i2c_init()` |
+| I²S0 LRCK / BCLK / DOUT0 | PB2 / PB3，AF5；PB4，AF4 | I²S 例程 `main.c` 的 `i2s_init()` |
+| LEDC DO | PE2，AF2 | WS2812 例程 `main.c` 的 `ledc_init()` |
+
+例如 TWI1 的初始化（已调用 HAL_Init 并将 APB2 配为 24 MHz）：
 
 ```c
-HAL_StatusTypeDef status = Board_SPI1_Init(1000000U);
-/* Check status before using the handle. */
+static I2C_HandleTypeDef hi2c1;
+GPIO_InitTypeDef pins = {.Pin = GPIO_PIN_8 | GPIO_PIN_9,
+    .Mode = GPIO_MODE_AF_PP, .Pull = GPIO_PULLUP,
+    .Drive = GPIO_DRIVE_LEVEL1, .Alternate = 4U};
+HAL_StatusTypeDef status = HAL_GPIO_Init(GPIOB, &pins);
+if (status == HAL_OK) {
+    hi2c1.Instance = I2C1;
+    hi2c1.Init = (I2C_InitTypeDef){.ClockSpeed = 100000U,
+                                  .AddressingMode = I2C_ADDRESSINGMODE_7BIT};
+    status = HAL_I2C_Init(&hi2c1);
+}
 ```
 
-I²C 和 I²S 对应封装为 `Board_I2C1_Init(100000U)`、`Board_I2S0_Init(48000U, I2S_DATAFORMAT_16B)`。使用 UART0 的 PB8/PB9 备用路由时，`Board_I2C1_Init()` 返回 `HAL_ERROR`，避免引脚冲突。
-
-其他控制器实例需自行补充 MSP；GPIO 的 Alternate 数值必须匹配实例与封装引脚。GPIO 驱动强度由 `Drive` 的 0–3 档指定，不使用 STM32 的 Speed 语义。
+GPIO 的 Alternate 数值必须匹配实例与封装引脚。GPIO 驱动强度由 `Drive` 的 0–3 档指定，不使用 STM32 的 Speed 语义。若把诊断 UART 改到 PB8/PB9，应用需避免与 TWI1 冲突。
 
 ## SPI
 
@@ -36,10 +47,12 @@ I²C 和 I²S 对应封装为 `Board_I2C1_Init(100000U)`、`Board_I2S0_Init(4800
 
 ```c
 uint8_t command = 0x2CU;
-if (Board_SPI1_Select(BOARD_SPI_LCD) == HAL_OK) {
+/* SPI and GPIO CS have already been initialized. */
+HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_RESET);
+{
     /* Set D/C, then send the command and its data. */
     HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi1, &command, 1U, 100U);
-    (void)Board_SPI1_Select(BOARD_SPI_NONE);
+    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_SET);
     (void)status;
 }
 ```
@@ -133,7 +146,8 @@ DMA 通道使用源/目的握手模式（MODE bits 2/3），等待外设刷新 F
 
 ```c
 static const uint32_t silence[256] = {0}; /* 128 stereo frames. */
-if (Board_I2S0_Init(48000U, 16U) == HAL_OK) {
+/* Configure audio PLL, GPIO and hi2s0.Init first; see the tone example. */
+if (HAL_I2S_Init(&hi2s0) == HAL_OK) {
     HAL_StatusTypeDef status = HAL_I2S_Transmit(&hi2s0, silence, 256U, 100U);
     (void)status;
 }
@@ -141,7 +155,7 @@ if (Board_I2S0_Init(48000U, 16U) == HAL_OK) {
 
 缓冲区统一为 `uint32_t`，有效采样放在低位，顺序为 `L0,R0,L1,R1,...`；接收使用硬件符号扩展。size 为声道采样数，必须为偶数，不是字节数或帧数。
 
-音频 PLL 为共享资源。初始化前显式调用 `HAL_RCC_AudioPLL_Config()`；BSP 封装已代为调用。更换频率族前须释放音频用户；其他 I²S、DMIC、Codec 或 OWA 时钟开启时，重调 PLL 返回 `HAL_BUSY`。
+音频 PLL 为共享资源。初始化前显式调用 `HAL_RCC_AudioPLL_Config()`；例程的本地 `i2s_init()` 包含此步骤。更换频率族前须释放音频用户；其他 I²S、DMIC、Codec 或 OWA 时钟开启时，重调 PLL 返回 `HAL_BUSY`。
 
 当前使用手册的两组 SDM 配方，送到 R328 I²S 的源时钟按 **24.576 / 22.5792 MHz** 计算。CCU 将该来源标为 `PLL_AUDIO(4X)`，`HAL_RCC_GetAudioPLL4XFreq()` 沿用此命名；不能按未经过后分频的公式当成 294.912 / 270.9504 MHz。频率查询同时检查配方中的 P=11。主机必须能精确分频产生 BCLK 和所需 MCLK，否则初始化失败。
 
@@ -156,25 +170,26 @@ if (Board_I2S0_Init(48000U, 16U) == HAL_OK) {
 支持硬件 LEDC 的轮询整帧发送，1–1024 颗串联 RGB 灯，每灯一个 `uint32_t`，低 24 位为 `0xGGRRBB`，高位先发。`HAL_LEDC_ColorRGB(r, g, b)` 将 RGB 分量转换为传输字。
 
 ```c
-uint32_t pixels[BOARD_WS2812_LED_COUNT] = {0};
-if (Board_LEDC_Init(BOARD_WS2812_LED_COUNT) == HAL_OK)
+uint32_t pixels[WS2812_LED_COUNT] = {0};
+/* Configure GPIO and hledc.Init first; see the WS2812 example. */
+if (HAL_LEDC_Init(&hledc) == HAL_OK)
 {
     pixels[0] = HAL_LEDC_ColorRGB(16U, 0U, 0U);
     HAL_StatusTypeDef status = HAL_LEDC_Transmit(
-        &hledc, pixels, BOARD_WS2812_LED_COUNT, 100U);
+        &hledc, pixels, WS2812_LED_COUNT, 100U);
     (void)status;
 }
 ```
 
 LEDC 模块时钟固定为 OSC24M / 1。`Init.T0H/T0L/T1H/T1L` 的单位是 24 MHz 时钟周期，分别限制为 2–32、2–64、2–64、2–32；驱动转换成寄存器的周期数减一编码。`ResetTimeUs` 与 `WaitDataTimeUs` 均为 1–341 µs，后者限制等待 FIFO 后续数据的时间。
 
-`Board_LEDC_Init()` 默认设置 7/23/23/7 周期，即 800 kbit/s、约 292/958 ns 的短/长脉冲、300 µs 帧复位和 50 µs 缺数等待，适配 XL-5050RGBC-WS2812B。该设置与 I²S 音频 PLL、APB2 分频无关。
+WS2812 例程的 `ledc_init()` 设置 7/23/23/7 周期，即 800 kbit/s、约 292/958 ns 的短/长脉冲、300 µs 帧复位和 50 µs 缺数等待，适配 XL-5050RGBC-WS2812B。该设置与 I²S 音频 PLL、APB2 分频无关。
 
 发送数量必须等于 `Init.LEDCount`。启动前预填最多 32 个 FIFO 字，长帧轮询 FIFO 占用量补数；API 等待整帧完成及最终低电平复位脉冲后返回。`timeout` 使用毫秒，`HAL_MAX_DELAY` 表示不限时。使用期间缓冲区必须有效，且不得被其他上下文修改。当前未实现 DMA 或 LEDC IRQ 发送。
 
 FIFO 溢出、缺数、发送超时和复位失败通过 `ErrorCode` 区分；失败后 CCU 复位中止发送，句柄进入 RESET，须重新调用 `HAL_LEDC_Init()` 后重试。长灯链补数需要足够的 CPU 响应时间；避免在传输期间执行长时间中断处理。默认 4 颗灯可全部预填，不依赖中途补数。
 
-PE2 的 AF2 由 MSP 配置，BSP 不在默认启动流程中开启 LEDC。灯效、复制命令及实板验证记录见 [WS2812 例程](../example/ledc/README.md)。
+PE2 的 AF2 由 WS2812 例程显式配置，默认应用不初始化 LEDC。灯效、复制命令及实板验证记录见 [WS2812 例程](../example/ledc/README.md)。
 
 ## 例程与验证
 
