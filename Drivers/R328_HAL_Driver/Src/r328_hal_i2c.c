@@ -1,4 +1,10 @@
 #include "r328_hal_bus_private.h"
+
+static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
+void HAL_I2C_SetPollingTimeout(uint32_t timeout)
+{
+    polling_timeout = timeout;
+}
 #define TWI_BUS_EN (1U << 6)
 #define TWI_START (1U << 5)
 #define TWI_STOP (1U << 4)
@@ -227,13 +233,14 @@ static HAL_StatusTypeDef transaction(I2C_HandleTypeDef *handle, uint16_t address
     return finish(handle, status, start, timeout);
 }
 HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *h, uint16_t a, const uint8_t *d,
-                                          uint32_t s, uint32_t t)
+                                          uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     return transaction(h, a, 0U, 0U, d, NULL, s, 0, t);
 }
-HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *h, uint16_t a, uint8_t *d, uint32_t s,
-                                         uint32_t t)
+HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *h, uint16_t a, uint8_t *d, uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if (s == 0U)
     {
         return HAL_ERROR;
@@ -241,8 +248,9 @@ HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *h, uint16_t a, uint8
     return transaction(h, a, 0U, 0U, NULL, d, s, 1, t);
 }
 HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *h, uint16_t a, uint16_t m, uint32_t ms,
-                                    const uint8_t *d, uint32_t s, uint32_t t)
+                                    const uint8_t *d, uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if ((ms != 1U && ms != 2U) || (ms == 1U && m > 0xFFU))
     {
         return HAL_ERROR;
@@ -250,17 +258,18 @@ HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *h, uint16_t a, uint16_t m
     return transaction(h, a, m, ms, d, NULL, s, 0, t);
 }
 HAL_StatusTypeDef HAL_I2C_Mem_Read(I2C_HandleTypeDef *h, uint16_t a, uint16_t m, uint32_t ms,
-                                   uint8_t *d, uint32_t s, uint32_t t)
+                                   uint8_t *d, uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if (s == 0U || (ms != 1U && ms != 2U) || (ms == 1U && m > 0xFFU))
     {
         return HAL_ERROR;
     }
     return transaction(h, a, m, ms, NULL, d, s, 1, t);
 }
-HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *h, uint16_t a, uint32_t trials,
-                                        uint32_t timeout)
+HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *h, uint16_t a, uint32_t trials)
 {
+    const uint32_t timeout = polling_timeout;
     if (trials == 0U)
     {
         return HAL_ERROR;

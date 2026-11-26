@@ -26,7 +26,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -37,6 +37,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -52,10 +53,9 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 int main(void)
@@ -72,18 +72,15 @@ int main(void)
     {
         HAL_GPIO_WritePin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN, GPIO_PIN_SET);
         HAL_UART_PrintValue(&huart0, "write high, read=",
-                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN),
-                            UART_TIMEOUT_MS);
+                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN));
         HAL_Delay(500U);
         HAL_GPIO_WritePin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN, GPIO_PIN_RESET);
         HAL_UART_PrintValue(&huart0, "write low, read=",
-                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN),
-                            UART_TIMEOUT_MS);
+                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN));
         HAL_Delay(500U);
         HAL_GPIO_TogglePin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN);
         HAL_UART_PrintValue(&huart0, "toggle, read=",
-                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN),
-                            UART_TIMEOUT_MS);
+                            HAL_GPIO_ReadPin(EXAMPLE_GPIO_OUTPUT_PORT, EXAMPLE_GPIO_OUTPUT_PIN));
         HAL_Delay(500U);
     }
 }

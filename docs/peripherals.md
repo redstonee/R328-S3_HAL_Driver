@@ -1,4 +1,4 @@
-# SPI、I²C / TWI、I²S / IIS、LEDC
+# UART、SPI、I²C / TWI、I²S / IIS、LEDC
 
 接口采用 `Handle / Init / MspInit / HAL_StatusTypeDef`。先调用 `HAL_Init()` 建立时基，再配置所需时钟与 GPIO，之后按需初始化外设；UART 输出由应用选择。每个控制器使用一个持续有效的句柄，仅供 CPU0 使用；轮询调用建议放在前台。
 
@@ -35,6 +35,43 @@ if (status == HAL_OK) {
 
 GPIO 的 Alternate 数值必须匹配实例与封装引脚。GPIO 驱动强度由 `Drive` 的 0–3 档指定，不使用 STM32 的 Speed 语义。若把诊断 UART 改到 PB8/PB9，应用需避免与 TWI1 冲突。
 
+## 轮询超时
+
+所有轮询收发 API（包括 UART 文本输出和 I²C `IsDeviceReady`）均移除末尾的 `timeout` 参数。每类驱动有一份模块全局设置，同类所有控制器、句柄和收发方向共用；不同驱动互不影响：
+
+```c
+HAL_UART_SetPollingTimeout(100U);  /* UART0–3 */
+HAL_SPI_SetPollingTimeout(100U);   /* SPI0/1 */
+HAL_I2C_SetPollingTimeout(20U);    /* TWI0/1 */
+HAL_I2S_SetPollingTimeout(1000U);  /* I2S0/1/2, allow long audio blocks */
+HAL_LEDC_SetPollingTimeout(100U);
+
+HAL_UART_Transmit(&huart0, bytes, sizeof(bytes));
+HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx));
+```
+
+默认值由 `Core/Inc/r328_hal_conf.h` 的 `HAL_POLLING_DEFAULT_TIMEOUT_MS` 定义，为 100 ms。单位为毫秒，0 表示不等待未就绪条件，`HAL_MAX_DELAY` 表示不限时。Init / DeInit 不重置模块设置；每个调用开始时读取一次，同一次调用中的 FIFO 批次、文本分段和收尾共用该期限。`HAL_I2C_IsDeviceReady()` 沿用每次探测独立计时的语义，全部 trials 使用调用开始时的同一个设置。
+
+设置函数从 CPU0 前台调用，不提供跨核配置同步。UART 的 `HAL_UART_GetRxFifoLevel()` 可立即查询接收 FIFO 中的字节数，不取走数据或清除 LSR 错误；例程先检查是否有字节，再调用 Receive，避免等待输入阻塞主循环。该查询不代表一整个定长包都已收到。
+
+IT / DMA 的期限仍由各句柄的 `HAL_xxx_SetAsyncTimeout()` 控制，轮询全局设置不影响它们。
+
+## UART
+
+UART0–3 支持轮询、`_IT` 和 `_DMA` 定长收发，发送与接收可以同时运行，也可在两个方向混用模式。同一方向忙时返回 `HAL_BUSY`；`Init/DeInit` 和修改异步超时要求两个方向均空闲。初始化不会选择任何全局 console，引脚由应用配置。
+
+异步入口为 `HAL_UART_Transmit_IT/Receive_IT/Transmit_DMA/Receive_DMA`。启动后在前台持续调用 `HAL_UART_Process()`，由 `TxCpltCallback/RxCpltCallback/ErrorCallback` 通知结果，回调前已解锁；UART 和 DMA 的 GIC 中断由 HAL 自动注册。TX 完成必须同时满足数据搬运结束与 FIFO / 移位寄存器清空，DMA 完成中断本身不代表最后一个停止位已发送。
+
+`HAL_UART_SetAsyncTimeout()` 配置每个方向从启动开始计算的毫秒期限，默认 100 ms；只能在空闲时修改，`HAL_MAX_DELAY` 表示不限时。UART 字符超时中断只帮助排空 RX FIFO，不提前结束定长接收；未实现 Receive-to-IDLE 或循环 DMA。
+
+DMA 使用 8 位单次传输，UART0–3 的请求号为 `DMA_REQUEST_UART0..3`（14–17）；收发同时工作时必须分配两个不同的 DMA 通道。先 `HAL_DMA_Init()`，再连接 UART 的 `hdmatx/hdmarx`。DMA 描述符和数据须位于物理 SRAM 或 DDR，保持现有 MMU / D-cache 关闭的启动条件。单次 DMA 长度上限为 `0x1FFFFFF` 字节。
+
+句柄、DMA 句柄和缓冲区必须持续有效，直到对应完成 / 错误回调，或中止成功。`HAL_UART_AbortTransmit/AbortReceive` 只停止指定方向，`HAL_UART_Abort` 停止两个方向；中止通过 `ErrorCallback` 报告 `HAL_UART_ERROR_ABORT`。若 DMA 尚未停止，中止返回 `HAL_TIMEOUT` 并保留方向的 BUSY 状态，此时继续调用 Process，不能重用缓冲区。两个方向同时出错时，错误回调也须结合 `State` 检查仍处于 BUSY 的方向，不能释放其缓冲区。失败或中止会清理该方向 FIFO；TX 移位寄存器中已经开始的字符仍可能发送完。成功 RX 保留 FIFO 中下一包的数据。
+
+状态通过 `State` 区分 READY / BUSY_TX / BUSY_RX / BUSY_TX_RX，`Tx.Count/Rx.Count` 表示尚未搬运的字节数；TX Count 为零时仍可能正在发送。`ErrorCode` 汇总两个方向的错误，也可查看 `Tx.ErrorCode/Rx.ErrorCode`。所有启动、Process 和中止接口仅从 CPU0 前台调用，不在其他 IRQ 中重入。
+
+复制和交互步骤见 [UART 例程](../example/uart/README.md)。
+
 ## SPI
 
 支持 SPI0/1 主机、8 位字长、模式 0–3、MSB/LSB first，以及轮询 / IRQ / DMA 发送、接收和全双工。最高 SCLK 为 100 MHz。驱动在 OSC24M 与 `PLL_PERI0(1X) / 3 = 200 MHz` 两个模块时钟及两种 CCR 分频器中选择不超过请求值的最快速率，相同时优先 OSC24M；实际值在 `ActualBaudRateHz`。例如 2 MHz 使用 OSC24M / 12，10 MHz 使用 200 MHz / 20，100 MHz 使用 200 MHz / 2。纯接收时 MOSI 发送 `0xFF`。
@@ -51,7 +88,7 @@ uint8_t command = 0x2CU;
 HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_RESET);
 {
     /* Set D/C, then send the command and its data. */
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi1, &command, 1U, 100U);
+    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi1, &command, 1U);
     HAL_GPIO_WritePin(GPIOH, GPIO_PIN_4, GPIO_PIN_SET);
     (void)status;
 }
@@ -99,7 +136,7 @@ HAL_SPI_TransmitReceive_DMA(&hspi1, send, receive, sizeof(send));
 uint8_t bytes[4];
 HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
     &hi2c1, 0x50U << 1, 0x0123U, I2C_MEMADD_SIZE_16BIT,
-    bytes, sizeof(bytes), 100U);
+    bytes, sizeof(bytes));
 ```
 
 `Master_Transmit/Receive` 用于无寄存器地址的设备；`Mem_Write/Read` 支持 8/16 位寄存器地址，16 位地址高字节先发。寄存器读取使用 repeated START，接收末字节发送 NACK。`HAL_I2C_IsDeviceReady()` 进行地址探测，按 trials 重试地址 NACK。
@@ -148,7 +185,7 @@ DMA 通道使用源/目的握手模式（MODE bits 2/3），等待外设刷新 F
 static const uint32_t silence[256] = {0}; /* 128 stereo frames. */
 /* Configure audio PLL, GPIO and hi2s0.Init first; see the tone example. */
 if (HAL_I2S_Init(&hi2s0) == HAL_OK) {
-    HAL_StatusTypeDef status = HAL_I2S_Transmit(&hi2s0, silence, 256U, 100U);
+    HAL_StatusTypeDef status = HAL_I2S_Transmit(&hi2s0, silence, 256U);
     (void)status;
 }
 ```
@@ -176,7 +213,7 @@ if (HAL_LEDC_Init(&hledc) == HAL_OK)
 {
     pixels[0] = HAL_LEDC_ColorRGB(16U, 0U, 0U);
     HAL_StatusTypeDef status = HAL_LEDC_Transmit(
-        &hledc, pixels, WS2812_LED_COUNT, 100U);
+        &hledc, pixels, WS2812_LED_COUNT);
     (void)status;
 }
 ```
@@ -185,7 +222,7 @@ LEDC 模块时钟固定为 OSC24M / 1。`Init.T0H/T0L/T1H/T1L` 的单位是 24 M
 
 WS2812 例程的 `ledc_init()` 设置 7/23/23/7 周期，即 800 kbit/s、约 292/958 ns 的短/长脉冲、300 µs 帧复位和 50 µs 缺数等待，适配 XL-5050RGBC-WS2812B。该设置与 I²S 音频 PLL、APB2 分频无关。
 
-发送数量必须等于 `Init.LEDCount`。启动前预填最多 32 个 FIFO 字，长帧轮询 FIFO 占用量补数；API 等待整帧完成及最终低电平复位脉冲后返回。`timeout` 使用毫秒，`HAL_MAX_DELAY` 表示不限时。使用期间缓冲区必须有效，且不得被其他上下文修改。当前未实现 DMA 或 LEDC IRQ 发送。
+发送数量必须等于 `Init.LEDCount`。启动前预填最多 32 个 FIFO 字，长帧轮询 FIFO 占用量补数；API 等待整帧完成及最终低电平复位脉冲后返回。全局轮询期限通过 `HAL_LEDC_SetPollingTimeout(ms)` 设置，覆盖发送和最终复位脉冲，`HAL_MAX_DELAY` 表示不限时。使用期间缓冲区必须有效，且不得被其他上下文修改。当前未实现 DMA 或 LEDC IRQ 发送。
 
 FIFO 溢出、缺数、发送超时和复位失败通过 `ErrorCode` 区分；失败后 CCU 复位中止发送，句柄进入 RESET，须重新调用 `HAL_LEDC_Init()` 后重试。长灯链补数需要足够的 CPU 响应时间；避免在传输期间执行长时间中断处理。默认 4 颗灯可全部预填，不依赖中途补数。
 

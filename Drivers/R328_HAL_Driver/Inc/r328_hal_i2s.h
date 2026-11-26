@@ -38,17 +38,20 @@ typedef struct
     volatile uint32_t ErrorCode;
     volatile uint32_t TxXferCount, RxXferCount;
 } I2S_HandleTypeDef;
+/* Module-wide polling deadline, shared by all instances and directions.
+ * Default: HAL_POLLING_DEFAULT_TIMEOUT_MS (100 ms). 0 checks readiness without
+ * waiting; HAL_MAX_DELAY waits indefinitely. Set in CPU0 foreground; Init and
+ * DeInit preserve it. Each polling call snapshots the value once. */
+void HAL_I2S_SetPollingTimeout(uint32_t timeout);
 HAL_StatusTypeDef HAL_I2S_Init(I2S_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_I2S_DeInit(I2S_HandleTypeDef *handle);
 /* Size is sample count, even for stereo L,R. Each sample occupies a uint32_t,
  * with 16/24/32 valid bits at the LSB. Receive sign-extends to 32 bits.
  * Finite blocking transfers stop the interface before returning. */
-HAL_StatusTypeDef HAL_I2S_Transmit(I2S_HandleTypeDef *handle, const uint32_t *data, uint32_t size,
-                                   uint32_t timeout);
-HAL_StatusTypeDef HAL_I2S_Receive(I2S_HandleTypeDef *handle, uint32_t *data, uint32_t size,
-                                  uint32_t timeout);
+HAL_StatusTypeDef HAL_I2S_Transmit(I2S_HandleTypeDef *handle, const uint32_t *data, uint32_t size);
+HAL_StatusTypeDef HAL_I2S_Receive(I2S_HandleTypeDef *handle, uint32_t *data, uint32_t size);
 HAL_StatusTypeDef HAL_I2S_TransmitReceive(I2S_HandleTypeDef *handle, const uint32_t *tx,
-                                          uint32_t *rx, uint32_t size, uint32_t timeout);
+                                          uint32_t *rx, uint32_t size);
 void HAL_I2S_MspInit(I2S_HandleTypeDef *handle);
 void HAL_I2S_MspDeInit(I2S_HandleTypeDef *handle);
 #endif

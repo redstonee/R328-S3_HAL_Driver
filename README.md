@@ -41,17 +41,17 @@ FEL DDR 已通过实板初始化、返回 FEL、应用下载 / 回读及执行�
 | 启动 | ARM 异常向量、VBAR、异常模式栈、数据初始化、异常现场记录 |
 | GPIO | 输入、推挽输出、复用、上下拉、驱动强度、端口读写、EINT 与中断回调 |
 | RCC | APB2、UART/SPI/TWI/I²S/LEDC 时钟与复位、音频 PLL |
-| UART | UART0–3 轮询收发、7/8 数据位、校验、超时、字符串 / 数值 / 十六进制输出 |
+| UART | UART0–3 轮询 / IRQ / DMA 独立收发、7/8 数据位、校验、超时、字符串 / 数值 / 十六进制输出 |
 | SPI | SPI0/1 主机、模式 0–3、8 位轮询 / IRQ / DMA、软件或控制器片选 |
 | I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、轮询 / IRQ / DMA、寄存器读写与重复 START |
-| DMA | 10 通道、字节宽度单次外设传输、描述符与完成中断；已接入 SPI / I²C |
+| DMA | 10 通道、字节宽度单次外设传输、描述符与完成中断；已接入 UART / SPI / I²C |
 | I²S / IIS | I2S0/1/2、立体声、16/24/32 位、主从模式、有限块轮询收发 |
 | LEDC | 硬件 WS2812 时序、1–1024 灯整帧轮询发送、GRB 格式、超时与错误恢复 |
 | TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |
 | 时基 | 64 位 ARM 架构计数器 CNTPCT，毫秒 tick 和延时，无周期 IRQ |
-| 例程 | 按模块细分的 26 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI / I²C 通用中断与 DMA、显示触摸、BMP280、I²S 波形和 WS2812 灯效 |
+| 例程 | 按模块细分的 28 个场景，含 SRAM / DRAM 测试、GPIO 中断、UART / SPI / I²C 通用中断与 DMA、显示触摸、BMP280、I²S 波形和 WS2812 灯效 |
 
-SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。其他外设的 DMA 接入、UART 中断收发、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
+SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。其他外设的 DMA 接入、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
 
 ## 构建配置
 
@@ -135,7 +135,7 @@ docs/                      加载、时基、外设和开发说明
 
 外设句柄、引脚和初始化顺序由应用管理。可直接在 `main.c` 中配置，也可在 `Core/Src/r328_hal_msp.c` 中覆盖 HAL 的弱 MSP 钩子。例程的配置都在各自目录内，不依赖 BSP 或公共例程库；迁移时同步修改外设实例、复用、片选和控制脚。
 
-HAL 仅支持 CPU0，句柄锁通过 CPU0 IRQ 临界区保护，不提供跨核同步。句柄应清零初始化并在使用期间保持有效。轮询 API 使用毫秒超时；阻塞操作建议放在前台。`HAL_GetTick()` 约每 49.7 天回绕，超时比较使用无符号差值。
+HAL 仅支持 CPU0，句柄锁通过 CPU0 IRQ 临界区保护，不提供跨核同步。句柄应清零初始化并在使用期间保持有效。轮询收发 API 不再传 `timeout`：UART / SPI / I²C / I²S / LEDC 分别通过 `HAL_xxx_SetPollingTimeout(ms)` 设置模块全局期限，同类全部实例及收发方向共用，默认 100 ms。每次调用固定本次期限，Init / DeInit 不重置设置；0 表示不等待未就绪条件，`HAL_MAX_DELAY` 表示不限时。异步期限继续由每个句柄的 `HAL_xxx_SetAsyncTimeout()` 单独设置。阻塞操作建议放在前台。`HAL_GetTick()` 约每 49.7 天回绕，超时比较使用无符号差值。
 
 ## 文档与验证
 
@@ -159,6 +159,6 @@ cmake --build build/host-tests
 ctest --test-dir build/host-tests --output-on-failure
 ```
 
-测试覆盖 UART 输出格式 / 锁 / 超时、寄存器操作、GPIO EINT/GIC 分发、总线状态机、LEDC FIFO 与错误恢复、超时回绕、时基、显示/触摸协议、FEL 下载流程和 NOR 启动读取协议；交叉构建另检查入口、向量、RAM 边界、栈及未解析符号。模型测试不替代真实信号和设备验证。
+测试覆盖 UART 输出格式 / IT / DMA 全双工 / FIFO 尾部 / 超时恢复、寄存器操作、GPIO EINT/GIC 分发、总线状态机、LEDC FIFO 与错误恢复、超时回绕、时基、显示/触摸协议、FEL 下载流程和 NOR 启动读取协议；交叉构建另检查入口、向量、RAM 边界、栈及未解析符号。模型测试不替代真实信号和设备验证。
 
 寄存器依据为 R328-S3 User Manual V1.4 和 Datasheet。原接口参考 [R328-S3_StdPeriphDriver](https://github.com/redstonee/R328-S3_StdPeriphDriver)，Cortex-A 异常与中断参考 [Arm 编程指南](https://documentation-service.arm.com/static/6893ad23e7f7ce6150e88d37) 和 [GIC 规范](https://documentation-service.arm.com/static/5f8ff196f86e16515cdbf969)。构建不在线下载这些资料或代码。

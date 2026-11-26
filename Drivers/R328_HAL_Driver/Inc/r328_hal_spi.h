@@ -46,16 +46,19 @@ typedef struct
     volatile uint8_t AsyncMode, BusDone, DmaDone;
     uint8_t DmaActive;
 } SPI_HandleTypeDef;
+/* Module-wide polling deadline, shared by all instances and directions.
+ * Default: HAL_POLLING_DEFAULT_TIMEOUT_MS (100 ms). 0 checks readiness without
+ * waiting; HAL_MAX_DELAY waits indefinitely. Set in CPU0 foreground; Init and
+ * DeInit preserve it. Each polling call snapshots the value once. */
+void HAL_SPI_SetPollingTimeout(uint32_t timeout);
 HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *handle);
 /* READY only; deselect all external devices before changing the bus clock. */
 HAL_StatusTypeDef HAL_SPI_SetBaudRate(SPI_HandleTypeDef *handle, uint32_t baud_rate_hz);
 HAL_StatusTypeDef HAL_SPI_DeInit(SPI_HandleTypeDef *handle);
-HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
-                                   uint32_t timeout);
-HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *handle, uint8_t *data, uint32_t size,
-                                  uint32_t timeout);
+HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size);
+HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *handle, uint8_t *data, uint32_t size);
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *handle, const uint8_t *tx, uint8_t *rx,
-                                          uint32_t size, uint32_t timeout);
+                                          uint32_t size);
 /* Foreground APIs. Call Process regularly; callbacks run in Process/Abort. */
 HAL_StatusTypeDef HAL_SPI_Transmit_IT(SPI_HandleTypeDef *handle, const uint8_t *data,
                                       uint32_t size);

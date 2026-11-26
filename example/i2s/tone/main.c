@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,10 +52,9 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static I2S_HandleTypeDef hi2s0;
@@ -155,43 +155,42 @@ static void play(uint8_t channel)
     if (hi2s0.State == HAL_I2S_STATE_RESET)
     {
         HAL_StatusTypeDef status = HAL_I2S_Init(&hi2s0);
-        HAL_UART_PrintValue(&huart0, "I2S reinit=", status, UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "I2S reinit=", status);
         if (status != HAL_OK)
         {
             return;
         }
     }
     prepare_tone(channel);
-    (void)HAL_UART_PrintString(&huart0,
-                               channel == 'l'   ? "Left only: 1 kHz, 200 ms.\r\n"
-                               : channel == 'r' ? "Right only: 500 Hz, 200 ms.\r\n"
-                                                : "Stereo: L=1 kHz, R=500 Hz, 200 ms.\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, channel == 'l' ? "Left only: 1 kHz, 200 ms.\r\n"
+                                        : channel == 'r'
+                                            ? "Right only: 500 Hz, 200 ms.\r\n"
+                                            : "Stereo: L=1 kHz, R=500 Hz, 200 ms.\r\n");
     uint32_t start = HAL_GetTick();
     /* One transfer: no stop/start gaps within the tone. */
-    HAL_StatusTypeDef status = HAL_I2S_Transmit(&hi2s0, samples, TONE_FRAMES * 2U, 1000U);
+    HAL_StatusTypeDef status = HAL_I2S_Transmit(&hi2s0, samples, TONE_FRAMES * 2U);
     uint32_t elapsed = HAL_GetTick() - start;
-    HAL_UART_PrintValue(&huart0, "I2S tone=", status, UART_TIMEOUT_MS);
-    HAL_UART_PrintValue(&huart0, "elapsed ms=", elapsed, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "I2S tone=", status);
+    HAL_UART_PrintValue(&huart0, "elapsed ms=", elapsed);
     if (status != HAL_OK)
     {
-        HAL_UART_PrintValue(&huart0, "ErrorCode=", hi2s0.ErrorCode, UART_TIMEOUT_MS);
-        HAL_UART_PrintValue(&huart0, "TX samples remaining=", hi2s0.TxXferCount, UART_TIMEOUT_MS);
-        (void)HAL_UART_PrintString(&huart0, "Stopped. Press p/l/r to reinitialize and retry.\r\n",
-                                   UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "ErrorCode=", hi2s0.ErrorCode);
+        HAL_UART_PrintValue(&huart0, "TX samples remaining=", hi2s0.TxXferCount);
+        (void)HAL_UART_PrintString(&huart0, "Stopped. Press p/l/r to reinitialize and retry.\r\n");
         return;
     }
-    (void)HAL_UART_PrintString(&huart0, "200 ms sine complete.\r\n", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "200 ms sine complete.\r\n");
 }
 
 int main(void)
 {
     app_init("I2S0 / 200 ms PCM16 sine");
+    HAL_I2S_SetPollingTimeout(1000U);
     require_ok("I2S init=", i2s_init(48000U, I2S_DATAFORMAT_16B));
-    HAL_UART_PrintValue(&huart0, "CPU Hz=", SystemCoreClock, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "CLKD=0x", UART_TIMEOUT_MS);
-    HAL_UART_PrintHex(&huart0, I2S0->CLKD, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "CPU Hz=", SystemCoreClock);
+    (void)HAL_UART_PrintString(&huart0, "CLKD=0x");
+    HAL_UART_PrintHex(&huart0, I2S0->CLKD);
+    (void)HAL_UART_PrintString(&huart0, "\r\n");
 
     /* Optional external amplifier enable; PB5 must remain GPIO, not I2S MCLK. */
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
@@ -203,12 +202,13 @@ int main(void)
     HAL_Delay(1U);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
     HAL_Delay(10U);
-    (void)HAL_UART_PrintString(
-        &huart0, "p=stereo, l=left only, r=right only; each plays 200 ms.\r\n", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0,
+                               "p=stereo, l=left only, r=right only; each plays 200 ms.\r\n");
     for (;;)
     {
         uint8_t byte;
-        if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK &&
+        if (HAL_UART_GetRxFifoLevel(&huart0) != 0U &&
+            HAL_UART_Receive(&huart0, &byte, 1U) == HAL_OK &&
             (byte == 'p' || byte == 'l' || byte == 'r'))
         {
             play(byte);

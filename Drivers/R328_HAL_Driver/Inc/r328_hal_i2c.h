@@ -41,21 +41,26 @@ typedef struct
     volatile uint8_t AsyncMode, Phase, DmaDone, BusDone;
     uint8_t Expected, StartAddress;
 } I2C_HandleTypeDef;
+/* Module-wide polling deadline, shared by all instances and directions.
+ * Default: HAL_POLLING_DEFAULT_TIMEOUT_MS (100 ms). 0 checks readiness without
+ * waiting; HAL_MAX_DELAY waits indefinitely. Set in CPU0 foreground; Init and
+ * DeInit preserve it. Each polling call snapshots the value once. */
+void HAL_I2C_SetPollingTimeout(uint32_t timeout);
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_I2C_DeInit(I2C_HandleTypeDef *handle);
 /* STM32 convention: pass the 7-bit address shifted left by one (0x50 << 1). */
 HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *handle, uint16_t address,
-                                          const uint8_t *data, uint32_t size, uint32_t timeout);
+                                          const uint8_t *data, uint32_t size);
 HAL_StatusTypeDef HAL_I2C_Master_Receive(I2C_HandleTypeDef *handle, uint16_t address, uint8_t *data,
-                                         uint32_t size, uint32_t timeout);
+                                         uint32_t size);
 HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *handle, uint16_t address,
                                     uint16_t mem_address, uint32_t mem_size, const uint8_t *data,
-                                    uint32_t size, uint32_t timeout);
+                                    uint32_t size);
 HAL_StatusTypeDef HAL_I2C_Mem_Read(I2C_HandleTypeDef *handle, uint16_t address,
                                    uint16_t mem_address, uint32_t mem_size, uint8_t *data,
-                                   uint32_t size, uint32_t timeout);
+                                   uint32_t size);
 HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *handle, uint16_t address,
-                                        uint32_t trials, uint32_t timeout);
+                                        uint32_t trials);
 void HAL_I2C_MspInit(I2C_HandleTypeDef *handle);
 /* Nonblocking APIs: call Process regularly for STOP completion and deadlines.
  * I2C callbacks run in Process/Abort context. Call transfer APIs in foreground. */

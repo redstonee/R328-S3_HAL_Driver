@@ -40,12 +40,17 @@ static inline uint32_t HAL_LEDC_ColorRGB(uint8_t red, uint8_t green, uint8_t blu
     return ((uint32_t)green << 16) | ((uint32_t)red << 8) | blue;
 }
 
+/* Module-wide polling deadline, shared by all instances and directions.
+ * Default: HAL_POLLING_DEFAULT_TIMEOUT_MS (100 ms). 0 checks readiness without
+ * waiting; HAL_MAX_DELAY waits indefinitely. Set in CPU0 foreground; Init and
+ * DeInit preserve it. Each polling call snapshots the value once. */
+void HAL_LEDC_SetPollingTimeout(uint32_t timeout);
 HAL_StatusTypeDef HAL_LEDC_Init(LEDC_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_LEDC_DeInit(LEDC_HandleTypeDef *handle);
-/* One complete frame: count must equal LEDCount, timeout covers the frame and
+/* One complete frame: count must equal LEDCount; the polling deadline covers the frame and
  * a final reset/latch pulse. Errors abort and require HAL_LEDC_Init(). */
 HAL_StatusTypeDef HAL_LEDC_Transmit(LEDC_HandleTypeDef *handle, const uint32_t *colors,
-                                    uint32_t count, uint32_t timeout);
+                                    uint32_t count);
 void HAL_LEDC_MspInit(LEDC_HandleTypeDef *handle);
 void HAL_LEDC_MspDeInit(LEDC_HandleTypeDef *handle);
 #endif

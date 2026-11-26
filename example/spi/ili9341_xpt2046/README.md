@@ -80,3 +80,5 @@ DMA 使用通道 0（TX）、1（RX）与 SPI1 请求 23。LCD 的 256 字节像
 寄存器和时序依据：[ILI9341 手册](https://cdn-shop.adafruit.com/datasheets/ILI9341.pdf)、[XPT2046 手册](https://files.waveshare.com/upload/9/98/XPT2046-EN.pdf)。例程不依赖 Arduino 或图形库。
 
 `Display_SPI_Init()` 负责本例的 SPI1、GPIO 片选和 DMA 初始化，须先于 `ILI9341_Init()` / `XPT2046_Init()` 调用。SPI 错误复位后也先重新初始化总线，再初始化设备。
+
+LCD / 触摸共享 `display_bus.c` 的 `DISPLAY_SPI_TIMEOUT_MS`（100 ms）。初始化时设置 SPI 模块全局轮询期限，设备读写不再传 timeout；选择 IT / DMA 时使用同一个值设置句柄的异步期限。

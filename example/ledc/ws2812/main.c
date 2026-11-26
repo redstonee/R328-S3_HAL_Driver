@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,18 +52,17 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static void uart_poll(void)
 {
     uint8_t byte;
-    if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK)
+    if (HAL_UART_GetRxFifoLevel(&huart0) != 0U && HAL_UART_Receive(&huart0, &byte, 1U) == HAL_OK)
     {
-        (void)HAL_UART_Transmit(&huart0, &byte, 1U, UART_TIMEOUT_MS);
+        (void)HAL_UART_Transmit(&huart0, &byte, 1U);
     }
 }
 
@@ -101,10 +101,10 @@ static uint32_t pixels[WS2812_LED_COUNT];
 
 static void Show(void)
 {
-    HAL_StatusTypeDef status = HAL_LEDC_Transmit(&hledc, pixels, WS2812_LED_COUNT, 100U);
+    HAL_StatusTypeDef status = HAL_LEDC_Transmit(&hledc, pixels, WS2812_LED_COUNT);
     if (status != HAL_OK)
     {
-        HAL_UART_PrintValue(&huart0, "LEDC error=", hledc.ErrorCode, UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "LEDC error=", hledc.ErrorCode);
         require_ok("LEDC transmit=", status);
     }
 }
@@ -121,13 +121,13 @@ static void Fill(uint8_t red, uint8_t green, uint8_t blue)
 int main(void)
 {
     app_init("LEDC / WS2812, PE2 AF2, 4 pixels");
+    HAL_LEDC_SetPollingTimeout(100U);
     require_ok("LEDC init=", ledc_init(WS2812_LED_COUNT));
-    (void)HAL_UART_PrintString(&huart0, "pixel order: LED7 -> LED6 -> LED5 -> LED4\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "pixel order: LED7 -> LED6 -> LED5 -> LED4\r\n");
     Fill(0U, 0U, 0U);
     for (;;)
     {
-        (void)HAL_UART_PrintString(&huart0, "red / green / blue / white\r\n", UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(&huart0, "red / green / blue / white\r\n");
         Fill(16U, 0U, 0U);
         HAL_Delay(500U);
         Fill(0U, 16U, 0U);
@@ -137,7 +137,7 @@ int main(void)
         Fill(8U, 8U, 8U);
         HAL_Delay(500U);
 
-        (void)HAL_UART_PrintString(&huart0, "chase\r\n", UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(&huart0, "chase\r\n");
         for (uint32_t i = 0U; i < WS2812_LED_COUNT; ++i)
         {
             Fill(0U, 0U, 0U);
@@ -145,14 +145,14 @@ int main(void)
             Show();
             HAL_Delay(250U);
         }
-        (void)HAL_UART_PrintString(&huart0, "blue breathing\r\n", UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintString(&huart0, "blue breathing\r\n");
         for (uint32_t step = 0U; step <= 64U; ++step)
         {
             uint32_t brightness = step <= 32U ? step : 64U - step;
             Fill(0U, 0U, (uint8_t)brightness);
             HAL_Delay(20U);
         }
-        HAL_UART_PrintValue(&huart0, "tick=", HAL_GetTick(), UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "tick=", HAL_GetTick());
         uart_poll();
     }
 }

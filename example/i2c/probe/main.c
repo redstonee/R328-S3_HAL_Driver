@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,18 +52,17 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static void uart_poll(void)
 {
     uint8_t byte;
-    if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK)
+    if (HAL_UART_GetRxFifoLevel(&huart0) != 0U && HAL_UART_Receive(&huart0, &byte, 1U) == HAL_OK)
     {
-        (void)HAL_UART_Transmit(&huart0, &byte, 1U, UART_TIMEOUT_MS);
+        (void)HAL_UART_Transmit(&huart0, &byte, 1U);
     }
 }
 
@@ -103,17 +103,18 @@ static HAL_StatusTypeDef i2c_init(uint32_t clock_speed)
 int main(void)
 {
     app_init("I2C1 / address probe");
+    HAL_I2C_SetPollingTimeout(20U);
     HAL_StatusTypeDef status = i2c_init(100000U);
-    HAL_UART_PrintValue(&huart0, "I2C1 init=", status, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "I2C1 init=", status);
     if (status != HAL_OK)
     {
         Error_Handler();
     }
     /* Address probe sends only address+W and STOP, without register data. */
-    status = HAL_I2C_IsDeviceReady(&hi2c1, 0x50U << 1, 1U, 20U);
-    HAL_UART_PrintValue(&huart0, "Probe 0x50 (NACK expected if absent)=", status, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "I2C ErrorCode=", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintU32(&huart0, hi2c1.ErrorCode, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nUART echo active.\r\n", UART_TIMEOUT_MS);
+    status = HAL_I2C_IsDeviceReady(&hi2c1, 0x50U << 1, 1U);
+    HAL_UART_PrintValue(&huart0, "Probe 0x50 (NACK expected if absent)=", status);
+    (void)HAL_UART_PrintString(&huart0, "I2C ErrorCode=");
+    (void)HAL_UART_PrintU32(&huart0, hi2c1.ErrorCode);
+    (void)HAL_UART_PrintString(&huart0, "\r\nUART echo active.\r\n");
     idle();
 }

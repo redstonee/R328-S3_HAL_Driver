@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,10 +52,9 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static SPI_HandleTypeDef hspi1;
@@ -108,14 +108,15 @@ static HAL_StatusTypeDef spi_deselect(void)
 int main(void)
 {
     app_init("SPI1 / unselected clock test");
+    HAL_SPI_SetPollingTimeout(100U);
     HAL_StatusTypeDef status = spi_init(1000000U);
-    HAL_UART_PrintValue(&huart0, "SPI1 init=", status, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "SPI1 init=", status);
     if (status != HAL_OK)
     {
         Error_Handler();
     }
-    (void)HAL_UART_PrintString(
-        &huart0, "Both CS high; inspect PH5/PH6. MISO data is undefined.\r\n", UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0,
+                               "Both CS high; inspect PH5/PH6. MISO data is undefined.\r\n");
     for (;;)
     {
         uint8_t tx[] = {0x55U, 0xAAU, 0x00U, 0xFFU}, rx[4];
@@ -124,9 +125,9 @@ int main(void)
         status = spi_deselect();
         if (status == HAL_OK)
         {
-            status = HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx), 100U);
+            status = HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx));
         }
-        HAL_UART_PrintValue(&huart0, "SPI1 clocks=", status, UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "SPI1 clocks=", status);
         if (status != HAL_OK)
         {
             Error_Handler();

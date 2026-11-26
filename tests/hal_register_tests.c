@@ -17,8 +17,14 @@ uint32_t HAL_GetTick(void)
 static UART_HandleTypeDef *printed_uart;
 static uint8_t printed[256];
 static uint32_t printed_size, fifo_stalls, fifo_reads;
+static uint32_t change_polling_timeout;
 uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
 {
+    if (printed_uart != NULL && reg == &printed_uart->Instance->USR && change_polling_timeout)
+    {
+        HAL_UART_SetPollingTimeout(0U);
+        change_polling_timeout = 0U;
+    }
     if (printed_uart != NULL && reg == &printed_uart->Instance->USR && fifo_stalls != 0U)
     {
         if (fifo_reads++ < fifo_stalls)
@@ -53,63 +59,137 @@ static void test_uart_print(void)
     UART1->USR = 2U;
     UART1->LSR = 1U << 6;
     UART0->DATA = 0xA5U;
-    assert(HAL_UART_PrintString(&uart, "hello\r\n", 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintString(&uart, "hello\r\n") == HAL_OK);
     expect_print("hello\r\n");
     assert(UART0->DATA == 0xA5U); /* Output must not implicitly use UART0. */
-    assert(HAL_UART_PrintString(&uart, "", 0U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_PrintString(&uart, "") == HAL_OK);
     expect_print("");
     const uint32_t values[] = {0U, 9U, 10U, UINT32_MAX};
     const char *const expected[] = {"0", "9", "10", "4294967295"};
     for (uint32_t i = 0U; i < 4U; ++i)
     {
-        assert(HAL_UART_PrintU32(&uart, values[i], 10U) == HAL_OK);
+        HAL_UART_SetPollingTimeout(10U);
+        assert(HAL_UART_PrintU32(&uart, values[i]) == HAL_OK);
         expect_print(expected[i]);
     }
-    assert(HAL_UART_PrintHex(&uart, 0x123ABU, 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintHex(&uart, 0x123ABU) == HAL_OK);
     expect_print("000123AB");
-    assert(HAL_UART_PrintHex(&uart, UINT32_MAX, 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintHex(&uart, UINT32_MAX) == HAL_OK);
     expect_print("FFFFFFFF");
-    assert(HAL_UART_PrintValue(&uart, "tick=", UINT32_MAX, 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintValue(&uart, "tick=", UINT32_MAX) == HAL_OK);
     expect_print("tick=4294967295\r\n");
     uint8_t bytes[23];
     for (uint32_t i = 0U; i < sizeof(bytes); ++i)
     {
         bytes[i] = (uint8_t)i;
     }
-    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes)) == HAL_OK);
     expect_print("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 \r\n");
-    assert(HAL_UART_HexDump(&uart, NULL, 0U, 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_HexDump(&uart, NULL, 0U) == HAL_OK);
     expect_print("\r\n");
-    assert(HAL_UART_PrintString(&uart, NULL, 10U) == HAL_ERROR);
-    assert(HAL_UART_PrintValue(&uart, NULL, 1U, 10U) == HAL_ERROR);
-    assert(HAL_UART_HexDump(&uart, NULL, 1U, 10U) == HAL_ERROR);
-    assert(HAL_UART_PrintHex(NULL, 1U, 10U) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintString(&uart, NULL) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintValue(&uart, NULL, 1U) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_HexDump(&uart, NULL, 1U) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintHex(NULL, 1U) == HAL_ERROR);
     uart.State = HAL_UART_STATE_RESET;
-    assert(HAL_UART_PrintU32(&uart, 1U, 10U) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintU32(&uart, 1U) == HAL_ERROR);
     uart.State = HAL_UART_STATE_READY;
     uart.Lock = HAL_LOCKED;
-    assert(HAL_UART_PrintValue(&uart, "a", 1U, 10U) == HAL_BUSY);
-    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 10U) == HAL_BUSY);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintValue(&uart, "a", 1U) == HAL_BUSY);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes)) == HAL_BUSY);
     assert(printed_size == 0U);
     uart.Lock = HAL_UNLOCKED;
     fifo_stalls = 2U;
     fake_tick = UINT32_MAX - 2U;
-    assert(HAL_UART_PrintValue(&uart, "a", 1U, 5U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(5U);
+    assert(HAL_UART_PrintValue(&uart, "a", 1U) == HAL_TIMEOUT);
     expect_print("a1"); /* CRLF must not get a fresh timeout. */
     fifo_reads = 0U;
-    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 5U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(5U);
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes)) == HAL_TIMEOUT);
     expect_print("00");
     fifo_reads = 0U;
     fake_tick = 0U;
-    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes), 100U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(100U);
+    assert(HAL_UART_HexDump(&uart, bytes, sizeof(bytes)) == HAL_TIMEOUT);
     /* The first 16-byte chunk consumes most of the deadline; the second
      * chunk must not restart it. */
     expect_print("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 1");
     fifo_stalls = 0U;
     UART1->LSR = 0U; /* Final shifter drain is part of the same timeout. */
-    assert(HAL_UART_PrintHex(&uart, 0U, 2U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(2U);
+    assert(HAL_UART_PrintHex(&uart, 0U) == HAL_TIMEOUT);
     expect_print("00000000");
+    UART1->LSR = 1U << 6;
+    fifo_stalls = 2U;
+    fifo_reads = 0U;
+    change_polling_timeout = 1U;
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_PrintString(&uart, "abc") == HAL_OK);
+    expect_print("abc"); /* Mid-call setting changes apply only to the next call. */
+    assert(HAL_UART_PrintString(&uart, "x") == HAL_TIMEOUT);
+    expect_print("");
+    fifo_reads = 0U;
+    HAL_UART_SetPollingTimeout(HAL_MAX_DELAY);
+    assert(HAL_UART_PrintString(&uart, "wait") == HAL_OK);
+    expect_print("wait");
+    fifo_stalls = 0U;
+    HAL_UART_SetPollingTimeout(HAL_POLLING_DEFAULT_TIMEOUT_MS);
     printed_uart = NULL;
+}
+
+static void test_uart_polling_policy(void)
+{
+    assert(HAL_RCC_APB2_Config24M() == HAL_OK);
+    UART_HandleTypeDef first = {
+        .Instance = UART2,
+        .Init = {115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE}};
+    UART_HandleTypeDef second = {.Instance = UART3, .Init = first.Init};
+    assert(HAL_UART_Init(&first) == HAL_OK && HAL_UART_Init(&second) == HAL_OK);
+    uint8_t byte;
+    UART2->LSR = UART3->LSR = 0U;
+    uint32_t before = fake_tick;
+    assert(HAL_UART_Receive(&first, &byte, 1U) == HAL_TIMEOUT);
+    assert(fake_tick - before == HAL_POLLING_DEFAULT_TIMEOUT_MS + 1U);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_Init(&first) == HAL_OK && HAL_UART_Init(&second) == HAL_OK);
+    before = fake_tick;
+    assert(HAL_UART_Receive(&first, &byte, 1U) == HAL_TIMEOUT);
+    assert(fake_tick - before == 2U); /* Init did not reset the shared policy. */
+    before = fake_tick;
+    assert(HAL_UART_Receive(&second, &byte, 1U) == HAL_TIMEOUT);
+    assert(fake_tick - before == 2U);
+    assert(HAL_UART_SetAsyncTimeout(&first, 17U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(4U);
+    assert(first.XferTimeout == 17U);
+    before = fake_tick;
+    assert(HAL_UART_Receive(&first, &byte, 1U) == HAL_TIMEOUT);
+    assert(fake_tick - before == 5U);
+    before = fake_tick;
+    assert(HAL_UART_Receive(&second, &byte, 1U) == HAL_TIMEOUT);
+    assert(fake_tick - before == 5U); /* A later setting affects both instances. */
+    UART2->LSR = HAL_UART_ERROR_PE;
+    UART2->RFL = 0xFFFF0100U;
+    assert(HAL_UART_GetRxFifoLevel(&first) == 256U);
+    assert(UART2->LSR == HAL_UART_ERROR_PE); /* RFL does not clear line errors. */
+    assert(HAL_UART_GetRxFifoLevel(NULL) == 0U);
+    assert(HAL_UART_DeInit(&first) == HAL_OK && HAL_UART_GetRxFifoLevel(&first) == 0U);
+    assert(HAL_UART_DeInit(&second) == HAL_OK);
+    HAL_UART_SetPollingTimeout(HAL_POLLING_DEFAULT_TIMEOUT_MS);
 }
 
 static void map_region(uintptr_t address, size_t size)
@@ -163,23 +243,29 @@ static void test_uart(void)
     uint8_t byte = 0xA5U;
     UART0->USR = 2U;
     UART0->LSR = 0x40U;
-    assert(HAL_UART_Transmit(&uart, &byte, 1U, 10U) == HAL_OK);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_Transmit(&uart, &byte, 1U) == HAL_OK);
     assert(UART0->DATA == 0xA5U && uart.State == HAL_UART_STATE_READY);
     UART0->USR = 0U;
     fake_tick = UINT32_MAX - 2U; /* Timeout remains correct across tick wrap. */
-    assert(HAL_UART_Transmit(&uart, &byte, 1U, 10U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(10U);
+    assert(HAL_UART_Transmit(&uart, &byte, 1U) == HAL_TIMEOUT);
     assert(uart.Lock == HAL_UNLOCKED && uart.State == HAL_UART_STATE_READY);
     UART0->LSR = 0U;
-    assert(HAL_UART_Receive(&uart, &byte, 1U, 0U) == HAL_TIMEOUT);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_Receive(&uart, &byte, 1U) == HAL_TIMEOUT);
     UART0->LSR = 1U;
     UART0->DATA = 0U;
     byte = 0xFFU;
-    assert(HAL_UART_Receive(&uart, &byte, 1U, 0U) == HAL_OK && byte == 0U);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_Receive(&uart, &byte, 1U) == HAL_OK && byte == 0U);
     UART0->LSR = 5U;
-    assert(HAL_UART_Receive(&uart, &byte, 1U, 0U) == HAL_ERROR);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_Receive(&uart, &byte, 1U) == HAL_ERROR);
     assert(uart.ErrorCode == HAL_UART_ERROR_PE && uart.Lock == HAL_UNLOCKED);
     uart.Lock = HAL_LOCKED;
-    assert(HAL_UART_Transmit(&uart, &byte, 1U, 0U) == HAL_BUSY);
+    HAL_UART_SetPollingTimeout(0U);
+    assert(HAL_UART_Transmit(&uart, &byte, 1U) == HAL_BUSY);
     uart.Lock = HAL_UNLOCKED;
     uart.Init.BaudRate = UINT32_MAX;
     assert(HAL_UART_Init(&uart) == HAL_ERROR);
@@ -248,6 +334,7 @@ int main(void)
     map_region(0x03000000U, 0x30000U);
     map_region(0x05000000U, 0x1000U);
     test_gpio();
+    test_uart_polling_policy();
     test_uart();
     test_uart_print();
     test_gic();

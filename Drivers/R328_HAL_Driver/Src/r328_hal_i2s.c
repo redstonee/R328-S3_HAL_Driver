@@ -1,4 +1,10 @@
 #include "r328_hal_bus_private.h"
+
+static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
+void HAL_I2S_SetPollingTimeout(uint32_t timeout)
+{
+    polling_timeout = timeout;
+}
 #define I2S_FIFO_RESET (3UL << 24)
 #define I2S_ERRORS 0x66U
 #define I2S_TX_FIFO_WORDS 128U
@@ -267,16 +273,18 @@ done:
     HAL_Unlock(&handle->Lock);
     return status;
 }
-HAL_StatusTypeDef HAL_I2S_Transmit(I2S_HandleTypeDef *h, const uint32_t *d, uint32_t s, uint32_t t)
+HAL_StatusTypeDef HAL_I2S_Transmit(I2S_HandleTypeDef *h, const uint32_t *d, uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if (d == NULL && s != 0U)
     {
         return HAL_ERROR;
     }
     return transfer(h, d, NULL, s, t);
 }
-HAL_StatusTypeDef HAL_I2S_Receive(I2S_HandleTypeDef *h, uint32_t *d, uint32_t s, uint32_t t)
+HAL_StatusTypeDef HAL_I2S_Receive(I2S_HandleTypeDef *h, uint32_t *d, uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if (d == NULL && s != 0U)
     {
         return HAL_ERROR;
@@ -284,8 +292,9 @@ HAL_StatusTypeDef HAL_I2S_Receive(I2S_HandleTypeDef *h, uint32_t *d, uint32_t s,
     return transfer(h, NULL, d, s, t);
 }
 HAL_StatusTypeDef HAL_I2S_TransmitReceive(I2S_HandleTypeDef *h, const uint32_t *tx, uint32_t *rx,
-                                          uint32_t s, uint32_t t)
+                                          uint32_t s)
 {
+    const uint32_t t = polling_timeout;
     if ((tx == NULL || rx == NULL) && s != 0U)
     {
         return HAL_ERROR;

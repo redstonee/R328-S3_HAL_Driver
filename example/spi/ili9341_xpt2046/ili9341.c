@@ -7,7 +7,6 @@
 #define LCD_RST GPIO_PIN_2
 #define LCD_DC GPIO_PIN_3
 #define LCD_BL GPIO_PIN_9
-#define LCD_TIMEOUT 100U
 static uint32_t initialized;
 
 void ILI9341_Backlight(uint32_t enabled)
@@ -23,11 +22,11 @@ static HAL_StatusTypeDef deselect(HAL_StatusTypeDef status)
 static HAL_StatusTypeDef command(uint8_t code, const uint8_t *data, uint32_t size)
 {
     HAL_GPIO_WritePin(GPIOH, LCD_DC, GPIO_PIN_RESET);
-    HAL_StatusTypeDef status = Display_SPI_Transmit(&code, 1U, LCD_TIMEOUT);
+    HAL_StatusTypeDef status = Display_SPI_Transmit(&code, 1U);
     HAL_GPIO_WritePin(GPIOH, LCD_DC, GPIO_PIN_SET);
     if (status == HAL_OK && size != 0U)
     {
-        status = Display_SPI_Transmit(data, size, LCD_TIMEOUT);
+        status = Display_SPI_Transmit(data, size);
     }
     return status;
 }
@@ -162,7 +161,7 @@ HAL_StatusTypeDef ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint1
     while (remaining != 0U && status == HAL_OK)
     {
         uint32_t count = remaining > sizeof(pixels) ? sizeof(pixels) : remaining;
-        status = Display_SPI_Transmit(pixels, count, LCD_TIMEOUT);
+        status = Display_SPI_Transmit(pixels, count);
         remaining -= count;
     }
     /* Every error path releases LCD CS before touch or another device can run. */

@@ -3,6 +3,7 @@
 #include "xpt2046.h"
 
 SPI_HandleTypeDef hspi1;
+#define DISPLAY_SPI_TIMEOUT_MS 100U
 
 static HAL_StatusTypeDef select_pins(Display_SPI_Device device)
 {
@@ -114,6 +115,7 @@ HAL_StatusTypeDef Display_SPI_Init(void)
                                    .BaudRateHz = ILI9341_SPI_HZ,
                                    .FirstBit = SPI_FIRSTBIT_MSB,
                                    .ChipSelect = 0U};
+    HAL_SPI_SetPollingTimeout(DISPLAY_SPI_TIMEOUT_MS);
     result = HAL_SPI_Init(&hspi1);
     if (result != HAL_OK)
     {
@@ -169,13 +171,13 @@ static HAL_StatusTypeDef wait_complete(HAL_StatusTypeDef result)
            : (hspi1.ErrorCode & HAL_SPI_ERROR_TIMEOUT) != 0U ? HAL_TIMEOUT
                                                              : HAL_ERROR;
 }
-HAL_StatusTypeDef Display_SPI_Transmit(const uint8_t *data, uint32_t size, uint32_t timeout)
+HAL_StatusTypeDef Display_SPI_Transmit(const uint8_t *data, uint32_t size)
 {
     if (transfer_mode == DISPLAY_SPI_POLLING)
     {
-        return HAL_SPI_Transmit(&hspi1, data, size, timeout);
+        return HAL_SPI_Transmit(&hspi1, data, size);
     }
-    HAL_StatusTypeDef result = HAL_SPI_SetAsyncTimeout(&hspi1, timeout);
+    HAL_StatusTypeDef result = HAL_SPI_SetAsyncTimeout(&hspi1, DISPLAY_SPI_TIMEOUT_MS);
     if (result != HAL_OK)
     {
         return result;
@@ -185,14 +187,13 @@ HAL_StatusTypeDef Display_SPI_Transmit(const uint8_t *data, uint32_t size, uint3
                              ? HAL_SPI_Transmit_IT(&hspi1, data, size)
                              : HAL_SPI_Transmit_DMA(&hspi1, data, size));
 }
-HAL_StatusTypeDef Display_SPI_TransmitReceive(const uint8_t *tx, uint8_t *rx, uint32_t size,
-                                              uint32_t timeout)
+HAL_StatusTypeDef Display_SPI_TransmitReceive(const uint8_t *tx, uint8_t *rx, uint32_t size)
 {
     if (transfer_mode == DISPLAY_SPI_POLLING)
     {
-        return HAL_SPI_TransmitReceive(&hspi1, tx, rx, size, timeout);
+        return HAL_SPI_TransmitReceive(&hspi1, tx, rx, size);
     }
-    HAL_StatusTypeDef result = HAL_SPI_SetAsyncTimeout(&hspi1, timeout);
+    HAL_StatusTypeDef result = HAL_SPI_SetAsyncTimeout(&hspi1, DISPLAY_SPI_TIMEOUT_MS);
     if (result != HAL_OK)
     {
         return result;

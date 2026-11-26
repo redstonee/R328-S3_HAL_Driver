@@ -9,6 +9,8 @@
 | GPIO | [interrupt](gpio/interrupt/main.c) | 双边沿 EINT、前台消抖、释放中断 |
 | [UART](uart/README.md) | [echo](uart/echo/main.c) | 115200 8N1 逐字节回显 |
 | UART | [line](uart/line/main.c) | 行缓冲、退格、CR/LF、溢出处理与空闲超时 |
+| UART | [interrupt](uart/interrupt/main.c) | IT 定长收发、双缓冲回显与完成回调 |
+| UART | [dma](uart/dma/main.c) | DMA 定长全双工收发，独立 TX/RX 通道与双缓冲 |
 | [Timer](tim/README.md) | [periodic](tim/periodic/main.c) | Timer1 每秒 IRQ 与事件计数 |
 | Timer | [oneshot](tim/oneshot/main.c) | 250 ms 单次 IRQ，串口命令重新启动 |
 | [时基](timebase/README.md) | [counter](timebase/counter/main.c) | 64 位计数器与关 IRQ 延时计时 |
@@ -78,8 +80,8 @@ xfel 不在 PATH 时，配置阶段增加 `-DR328_XFEL=/absolute/path/to/xfel`�
 
 ## 配置与验证
 
-框架不配置全局 console。例程为了交互和观察结果，在本地 `app_init()` 中显式配置 UART0 PH0/PH1、115200 8N1；可自行更换实例、引脚或移除输出。数值格式化通过 `HAL_UART_PrintU32/PrintHex/PrintValue/HexDump` 完成，均须传入句柄和超时。外设示例引脚见 [接口说明](../docs/peripherals.md)。复制后在 `Core/Inc/gpio_example.h` 中修改 GPIO 引脚，在 `Core/Inc/config.h` 中修改 I²C 轮询读取参数，在 `Core/Inc/i2c_async_config.h` 中修改 I²C 中断 / DMA 例程参数，在 `Core/Inc/ili9341.h`、`Core/Inc/xpt2046.h` 中修改显示控制脚与触摸参数；需要调整面板初始化序列时修改 `Core/Src/ili9341.c`。
+框架不配置全局 console。例程为了交互和观察结果，在本地 `app_init()` 中显式配置 UART0 PH0/PH1、115200 8N1；可自行更换实例、引脚或移除输出。数值格式化通过 `HAL_UART_PrintU32/PrintHex/PrintValue/HexDump` 完成，均显式传入句柄，轮询超时通过 `HAL_UART_SetPollingTimeout(ms)` 统一设置。外设示例引脚见 [接口说明](../docs/peripherals.md)。复制后在 `Core/Inc/gpio_example.h` 中修改 GPIO 引脚，在 `Core/Inc/config.h` 中修改 I²C 轮询读取参数，在 `Core/Inc/i2c_async_config.h` 中修改 I²C 中断 / DMA 例程参数，在 `Core/Inc/ili9341.h`、`Core/Inc/xpt2046.h` 中修改显示控制脚与触摸参数；需要调整面板初始化序列时修改 `Core/Src/ili9341.c`。
 
-SPI / I²C 的 `interrupt`、`dma` 为独立通用例程；SPI 显示/触摸和 I²C BMP280 例程支持轮询、中断、DMA 切换。异步完成与超时在前台 Process 中处理，DMA 例程各自占用通道 0 / 1，合并到一个应用时需分配不同通道。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
+UART / SPI / I²C 的 `interrupt`、`dma` 为独立通用例程；SPI 显示/触摸和 I²C BMP280 例程支持轮询、中断、DMA 切换。异步完成与超时在前台 Process 中处理，DMA 例程各自占用通道 0 / 1，合并到一个应用时需分配不同通道。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
 
 主机测试验证寄存器、IRQ 分发与协议逻辑；交叉构建检查镜像入口和内存布局。实际信号、显示效果与触摸校准需在目标硬件上验证。

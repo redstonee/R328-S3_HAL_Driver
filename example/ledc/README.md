@@ -42,11 +42,11 @@ HAL_StatusTypeDef status = ledc_init(WS2812_LED_COUNT);
 if (status == HAL_OK)
 {
     pixels[0] = HAL_LEDC_ColorRGB(16U, 0U, 0U);
-    status = HAL_LEDC_Transmit(&hledc, pixels, WS2812_LED_COUNT, 100U);
+    status = HAL_LEDC_Transmit(&hledc, pixels, WS2812_LED_COUNT);
 }
 ```
 
-`HAL_LEDC_ColorRGB()` 接受常规 RGB 分量，负责转换成 GRB 字。一次发送必须覆盖 `Init.LEDCount` 指定的整条灯链；超时单位为毫秒，包含发送和最终复位脉冲。成功返回后可以立即发送下一帧。
+`HAL_LEDC_ColorRGB()` 接受常规 RGB 分量，负责转换成 GRB 字。一次发送必须覆盖 `Init.LEDCount` 指定的整条灯链；超时通过 `HAL_LEDC_SetPollingTimeout(ms)` 设置，默认 100 ms，包含发送和最终复位脉冲，后续发送不再传 timeout。成功返回后可以立即发送下一帧。
 
 轮询模式支持 1–1024 颗灯。4 颗灯的数据在启动前全部预填 FIFO；超过 32 颗时由 CPU 持续补充。长时间 IRQ 会影响长灯链补数，连续高负载刷新仍需后续 DMA 实现。FIFO 溢出、缺数或超时后，驱动复位控制器，句柄进入 RESET；检查 `hledc.ErrorCode`，重新初始化后才能重试。接口细节见 [外设说明](../../docs/peripherals.md#ledc)。
 

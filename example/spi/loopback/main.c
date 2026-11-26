@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,10 +52,9 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static SPI_HandleTypeDef hspi1;
@@ -112,10 +112,11 @@ static uint8_t tx[TRANSFER_SIZE], rx[TRANSFER_SIZE];
 int main(void)
 {
     app_init("SPI1 / external MOSI-MISO loopback / 131 bytes");
+    HAL_SPI_SetPollingTimeout(100U);
     require_ok("SPI init=", spi_init(1000000U));
     require_ok("SPI deselect=", spi_deselect());
-    (void)HAL_UART_PrintString(&huart0, "Connect MOSI to MISO; leave both device selects high.\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0,
+                               "Connect MOSI to MISO; leave both device selects high.\r\n");
     uint32_t round = 0U;
     for (;;)
     {
@@ -123,7 +124,7 @@ int main(void)
         {
             tx[i] = (uint8_t)((i + round) ^ 0xA5U);
         }
-        require_ok("SPI transfer=", HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx), 100U));
+        require_ok("SPI transfer=", HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx)));
         uint32_t mismatches = 0U;
         for (uint32_t i = 0U; i < TRANSFER_SIZE; ++i)
         {
@@ -132,10 +133,10 @@ int main(void)
                 ++mismatches;
             }
         }
-        HAL_UART_PrintValue(&huart0, "round=", round++, UART_TIMEOUT_MS);
-        HAL_UART_PrintValue(&huart0, "mismatched bytes=", mismatches, UART_TIMEOUT_MS);
-        (void)HAL_UART_PrintString(&huart0, "RX first 16 bytes: ", UART_TIMEOUT_MS);
-        HAL_UART_HexDump(&huart0, rx, 16U, UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, "round=", round++);
+        HAL_UART_PrintValue(&huart0, "mismatched bytes=", mismatches);
+        (void)HAL_UART_PrintString(&huart0, "RX first 16 bytes: ");
+        HAL_UART_HexDump(&huart0, rx, 16U);
         HAL_Delay(1000U);
     }
 }

@@ -256,7 +256,8 @@ static void transfers(void)
                 assert(HAL_SPI_Init(&spi) == HAL_BUSY && HAL_SPI_DeInit(&spi) == HAL_BUSY);
                 assert(HAL_SPI_SetBaudRate(&spi, 10000000U) == HAL_BUSY);
                 assert(HAL_SPI_Transmit_IT(&spi, tx, 1U) == HAL_BUSY);
-                assert(HAL_SPI_Transmit(&spi, tx, 1U, 10U) == HAL_BUSY);
+                HAL_SPI_SetPollingTimeout(10U);
+                assert(HAL_SPI_Transmit(&spi, tx, 1U) == HAL_BUSY);
                 pump();
                 assert(callbacks[kind] == before + 1U && spi.ErrorCode == HAL_SPI_ERROR_NONE);
                 assert(spi.XferCount == 0U && wire_size == size);

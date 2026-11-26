@@ -12,7 +12,7 @@ _Static_assert(TOUCH_RAW_Y_MAX > TOUCH_RAW_Y_MIN && TOUCH_RAW_Y_MAX <= 4095U,
 static HAL_StatusTypeDef conversion(uint8_t control, uint16_t *value)
 {
     uint8_t tx[3] = {control, 0U, 0U}, rx[3];
-    HAL_StatusTypeDef status = Display_SPI_TransmitReceive(tx, rx, sizeof(tx), 20U);
+    HAL_StatusTypeDef status = Display_SPI_TransmitReceive(tx, rx, sizeof(tx));
     if (status == HAL_OK)
     {
         /* Discard dummy leading bit and three trailing bits; MSB first. */

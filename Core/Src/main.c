@@ -17,6 +17,7 @@ int main(void)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(100U);
     /* Configure application peripherals and their pins here. */
     GPIO_InitTypeDef gInit = {.Pin = LED1_PIN, .Mode = GPIO_MODE_OUTPUT_PP};
     HAL_GPIO_Init(LED1_PORT, &gInit);
@@ -36,9 +37,9 @@ int main(void)
 
     for (;;)
     {
-        HAL_UART_PrintString(&huart0, "Fuck The World! ", 100);
-        HAL_UART_PrintU32(&huart0, HAL_GetTick(), 100);
-        HAL_UART_PrintString(&huart0, "\r\n", 100);
+        HAL_UART_PrintString(&huart0, "Fuck The World! ");
+        HAL_UART_PrintU32(&huart0, HAL_GetTick());
+        HAL_UART_PrintString(&huart0, "\r\n");
 
         HAL_GPIO_TogglePin(LED1_PORT, LED1_PIN);
         HAL_Delay(500);

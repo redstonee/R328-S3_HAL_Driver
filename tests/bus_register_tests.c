@@ -301,7 +301,8 @@ static void test_spi(void)
     {
         tx[i] = (uint8_t)i;
     }
-    assert(HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx), 100U) == HAL_OK);
+    HAL_SPI_SetPollingTimeout(100U);
+    assert(HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx)) == HAL_OK);
     assert(spi_bursts == 3U && spi_log_count == sizeof(tx));
     assert(memcmp(tx, spi_log, sizeof(tx)) == 0);
     for (uint32_t i = 0U; i < sizeof(rx); ++i)
@@ -310,30 +311,37 @@ static void test_spi(void)
     }
     assert((GPIOH->DAT & 0x110U) == 0x10U); /* Caller keeps GPIO CS through multiple calls. */
     assert(Test_SPI1_Select(TEST_SPI_NONE) == HAL_OK);
-    assert(HAL_SPI_Receive(&hspi1, rx, sizeof(rx), 100U) == HAL_OK && rx[136] == 0xFFU);
+    HAL_SPI_SetPollingTimeout(100U);
+    assert(HAL_SPI_Receive(&hspi1, rx, sizeof(rx)) == HAL_OK && rx[136] == 0xFFU);
     hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
     assert(HAL_SPI_Init(&hspi1) == HAL_OK);
     cs_asserts = 0U;
     cs_deasserts = 0U;
-    assert(HAL_SPI_Transmit(&hspi1, tx, sizeof(tx), 100U) == HAL_OK);
+    HAL_SPI_SetPollingTimeout(100U);
+    assert(HAL_SPI_Transmit(&hspi1, tx, sizeof(tx)) == HAL_OK);
     assert(cs_asserts == 1U && cs_deasserts == 1U); /* No SS pulse at 64-byte boundaries. */
     hspi1.Lock = HAL_LOCKED;
-    assert(HAL_SPI_Transmit(&hspi1, tx, 1U, 10U) == HAL_BUSY);
+    HAL_SPI_SetPollingTimeout(10U);
+    assert(HAL_SPI_Transmit(&hspi1, tx, 1U) == HAL_BUSY);
     hspi1.Lock = HAL_UNLOCKED;
-    assert(HAL_SPI_TransmitReceive(&hspi1, tx, NULL, 1U, 10U) == HAL_ERROR);
+    HAL_SPI_SetPollingTimeout(10U);
+    assert(HAL_SPI_TransmitReceive(&hspi1, tx, NULL, 1U) == HAL_ERROR);
     spi_stall = 1;
     tick = UINT32_MAX - 2U;
-    assert(HAL_SPI_Transmit(&hspi1, tx, 1U, 5U) == HAL_TIMEOUT);
+    HAL_SPI_SetPollingTimeout(5U);
+    assert(HAL_SPI_Transmit(&hspi1, tx, 1U) == HAL_TIMEOUT);
     assert(hspi1.Lock == HAL_UNLOCKED && hspi1.State == HAL_SPI_STATE_RESET);
     spi_stall = 0;
     assert(HAL_SPI_Init(&hspi1) == HAL_OK);
     spi_error = 1;
-    assert(HAL_SPI_Transmit(&hspi1, tx, 1U, 10U) == HAL_ERROR);
+    HAL_SPI_SetPollingTimeout(10U);
+    assert(HAL_SPI_Transmit(&hspi1, tx, 1U) == HAL_ERROR);
     assert(hspi1.ErrorCode == HAL_SPI_ERROR_FIFO);
     spi_error = 0;
     assert(HAL_SPI_Init(&hspi1) == HAL_OK);
     stuck_reset = 1;
-    assert(HAL_SPI_Transmit(&hspi1, tx, 1U, 10U) == HAL_TIMEOUT);
+    HAL_SPI_SetPollingTimeout(10U);
+    assert(HAL_SPI_Transmit(&hspi1, tx, 1U) == HAL_TIMEOUT);
     stuck_reset = 0;
     hspi1.Init.BaudRateHz = 999999U;
     assert(HAL_SPI_Init(&hspi1) == HAL_OK && hspi1.ActualBaudRateHz <= 999999U);
@@ -404,47 +412,57 @@ static void test_i2c(void)
     assert(hi2c1.ActualClockSpeed == 100000U);
     assert((GPIOB->CFG[1] & 0xFFU) == 0x44U);
     uint8_t data[3];
-    assert(HAL_I2C_Mem_Read(&hi2c1, 0x50U << 1, 0x1234U, 2U, data, 3U, 100U) == HAL_OK);
+    HAL_I2C_SetPollingTimeout(100U);
+    assert(HAL_I2C_Mem_Read(&hi2c1, 0x50U << 1, 0x1234U, 2U, data, 3U) == HAL_OK);
     const uint8_t expected[] = {0xA0U, 0x12U, 0x34U, 0xA1U};
     assert(twi_log_count == sizeof(expected) && memcmp(twi_log, expected, sizeof(expected)) == 0);
     assert(twi_starts == 2U && twi_stops == 1U); /* Repeated START, no intermediate STOP. */
     assert(twi_ack[0] == 1U && twi_ack[1] == 1U && twi_ack[2] == 0U);
     assert(data[0] == 0x60U && data[2] == 0x62U);
     clear_twi_model();
-    assert(HAL_I2C_Mem_Write(&hi2c1, 0xA0U, 0x12U, 1U, data, 3U, 100U) == HAL_OK);
+    HAL_I2C_SetPollingTimeout(100U);
+    assert(HAL_I2C_Mem_Write(&hi2c1, 0xA0U, 0x12U, 1U, data, 3U) == HAL_OK);
     const uint8_t write_expected[] = {0xA0U, 0x12U, 0x60U, 0x61U, 0x62U};
     assert(twi_log_count == sizeof(write_expected) &&
            memcmp(twi_log, write_expected, sizeof(write_expected)) == 0);
     assert(twi_starts == 1U && twi_stops == 1U);
     clear_twi_model();
-    assert(HAL_I2C_Master_Receive(&hi2c1, 0xA0U, data, 1U, 100U) == HAL_OK);
+    HAL_I2C_SetPollingTimeout(100U);
+    assert(HAL_I2C_Master_Receive(&hi2c1, 0xA0U, data, 1U) == HAL_OK);
     assert(twi_ack[0] == 0U && twi_log[0] == 0xA1U);
     clear_twi_model();
     twi_nack = 1;
-    assert(HAL_I2C_IsDeviceReady(&hi2c1, 0xA0U, 3U, 100U) == HAL_ERROR);
+    HAL_I2C_SetPollingTimeout(100U);
+    assert(HAL_I2C_IsDeviceReady(&hi2c1, 0xA0U, 3U) == HAL_ERROR);
     assert(twi_starts == 3U && twi_stops == 3U && hi2c1.ErrorCode == HAL_I2C_ERROR_AF);
     clear_twi_model();
     twi_arlo = 1;
-    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, data, 1U, 100U) == HAL_ERROR);
+    HAL_I2C_SetPollingTimeout(100U);
+    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, data, 1U) == HAL_ERROR);
     assert(twi_stops == 0U && hi2c1.ErrorCode == HAL_I2C_ERROR_ARLO);
     clear_twi_model();
     twi_stall = 1;
     tick = UINT32_MAX - 1U;
-    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, data, 1U, 5U) == HAL_TIMEOUT);
+    HAL_I2C_SetPollingTimeout(5U);
+    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, data, 1U) == HAL_TIMEOUT);
     assert(hi2c1.Lock == HAL_UNLOCKED && hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
     assert(Test_I2C1_Init(400000U) == HAL_OK && hi2c1.ActualClockSpeed == 400000U);
     stop_stall = 1;
-    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, NULL, 0U, 5U) == HAL_TIMEOUT);
+    HAL_I2C_SetPollingTimeout(5U);
+    assert(HAL_I2C_Master_Transmit(&hi2c1, 0xA0U, NULL, 0U) == HAL_TIMEOUT);
     assert(hi2c1.State == HAL_I2C_STATE_RESET);
     clear_twi_model();
     stuck_reset = 1;
     assert(Test_I2C1_Init(100000U) == HAL_TIMEOUT);
     stuck_reset = 0;
     assert(Test_I2C1_Init(100000U) == HAL_OK);
-    assert(HAL_I2C_Mem_Read(&hi2c1, 0xA1U, 0U, 1U, data, 1U, 10U) == HAL_ERROR);
-    assert(HAL_I2C_Mem_Read(&hi2c1, 0xA0U, 0x100U, 1U, data, 1U, 10U) == HAL_ERROR);
-    assert(HAL_I2C_Master_Receive(&hi2c1, 0xA0U, NULL, 0U, 10U) == HAL_ERROR);
+    HAL_I2C_SetPollingTimeout(10U);
+    assert(HAL_I2C_Mem_Read(&hi2c1, 0xA1U, 0U, 1U, data, 1U) == HAL_ERROR);
+    HAL_I2C_SetPollingTimeout(10U);
+    assert(HAL_I2C_Mem_Read(&hi2c1, 0xA0U, 0x100U, 1U, data, 1U) == HAL_ERROR);
+    HAL_I2C_SetPollingTimeout(10U);
+    assert(HAL_I2C_Master_Receive(&hi2c1, 0xA0U, NULL, 0U) == HAL_ERROR);
     assert(HAL_I2C_DeInit(&hi2c1) == HAL_OK);
 }
 static void test_i2s(void)
@@ -471,7 +489,8 @@ static void test_i2s(void)
     {
         tx[i] = i;
     }
-    assert(HAL_I2S_Transmit(&hi2s0, tx, 260U, 1000U) == HAL_OK);
+    HAL_I2S_SetPollingTimeout(1000U);
+    assert(HAL_I2S_Transmit(&hi2s0, tx, 260U) == HAL_OK);
     assert(audio_written == 260U && audio_queued == 0U && I2S0->TXCNT == 260U);
     assert(memcmp(tx, audio_log, sizeof(tx)) == 0);
     assert((I2S0->CTL & 7U) == 0U && hi2s0.Lock == HAL_UNLOCKED);
@@ -486,7 +505,8 @@ static void test_i2s(void)
     for (uint32_t block = 0U; block < 20U; ++block)
     {
         audio_written = 0U;
-        assert(HAL_I2S_Transmit(&hi2s0, tone, 960U, 1000U) == HAL_OK);
+        HAL_I2S_SetPollingTimeout(1000U);
+        assert(HAL_I2S_Transmit(&hi2s0, tone, 960U) == HAL_OK);
         assert(audio_written == 960U && audio_queued == 0U);
         assert(memcmp(tone, audio_log, sizeof(tone)) == 0);
     }
@@ -496,31 +516,38 @@ static void test_i2s(void)
     {
         audio_written = 0U;
         audio_error = tx_errors[i];
-        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U, 1000U) == HAL_ERROR);
+        HAL_I2S_SetPollingTimeout(1000U);
+        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U) == HAL_ERROR);
         assert(hi2s0.ErrorCode == tx_errors[i] && hi2s0.TxXferCount != 0U);
         assert(hi2s0.State == HAL_I2S_STATE_RESET && hi2s0.Lock == HAL_UNLOCKED);
         audio_error = 0U;
         assert(HAL_I2S_Init(&hi2s0) == HAL_OK);
         audio_written = 0U;
-        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U, 1000U) == HAL_OK);
+        HAL_I2S_SetPollingTimeout(1000U);
+        assert(HAL_I2S_Transmit(&hi2s0, tx, 260U) == HAL_OK);
         assert(memcmp(tx, audio_log, sizeof(tx)) == 0);
     }
-    assert(HAL_I2S_Transmit(&hi2s0, tx, 1U, 100U) == HAL_ERROR);
-    assert(HAL_I2S_Receive(&hi2s0, rx, 2U, 100U) == HAL_ERROR);
+    HAL_I2S_SetPollingTimeout(100U);
+    assert(HAL_I2S_Transmit(&hi2s0, tx, 1U) == HAL_ERROR);
+    HAL_I2S_SetPollingTimeout(100U);
+    assert(HAL_I2S_Receive(&hi2s0, rx, 2U) == HAL_ERROR);
     hi2s0.Init.Mode = I2S_MODE_MASTER_TX_RX;
     assert(HAL_I2S_Init(&hi2s0) == HAL_OK);
     audio_written = 0U;
-    assert(HAL_I2S_TransmitReceive(&hi2s0, tx, rx, 260U, 1000U) == HAL_OK);
+    HAL_I2S_SetPollingTimeout(1000U);
+    assert(HAL_I2S_TransmitReceive(&hi2s0, tx, rx, 260U) == HAL_OK);
     assert(audio_read == 260U && rx[0] == 0xFFFF8000U && rx[259] == 0xFFFF8103U);
     audio_written = 0U;
     audio_error = HAL_I2S_ERROR_OVR;
-    assert(HAL_I2S_Receive(&hi2s0, rx, 2U, 20U) == HAL_ERROR);
+    HAL_I2S_SetPollingTimeout(20U);
+    assert(HAL_I2S_Receive(&hi2s0, rx, 2U) == HAL_ERROR);
     assert(hi2s0.ErrorCode == HAL_I2S_ERROR_OVR && hi2s0.State == HAL_I2S_STATE_RESET);
     audio_error = 0U;
     assert(HAL_I2S_Init(&hi2s0) == HAL_OK);
     audio_stall = 1;
     tick = UINT32_MAX - 3U;
-    assert(HAL_I2S_Transmit(&hi2s0, tx, 2U, 10U) == HAL_TIMEOUT);
+    HAL_I2S_SetPollingTimeout(10U);
+    assert(HAL_I2S_Transmit(&hi2s0, tx, 2U) == HAL_TIMEOUT);
     assert(hi2s0.Lock == HAL_UNLOCKED && hi2s0.State == HAL_I2S_STATE_RESET);
     audio_stall = 0;
     assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);

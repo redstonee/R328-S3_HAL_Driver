@@ -10,6 +10,7 @@ set(HAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/R328_HAL_Driver)
 add_executable(
     hal_register_tests
     hal_register_tests.c ${HAL_DIR}/Src/r328_hal_gpio.c ${HAL_DIR}/Src/r328_hal_uart.c
+    ${HAL_DIR}/Src/r328_hal_dma.c
     ${HAL_DIR}/Src/r328_hal_rcc.c ${HAL_DIR}/Src/r328_hal_tim.c ${HAL_DIR}/Src/r328_hal_gic.c
 )
 target_include_directories(
@@ -18,6 +19,17 @@ target_include_directories(
 target_compile_definitions(hal_register_tests PRIVATE R328_HAL_HOST_TEST=1 _DEFAULT_SOURCE=1)
 target_compile_options(hal_register_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME hal_register_logic COMMAND hal_register_tests)
+add_executable(
+    uart_async_tests uart_async_tests.c ${HAL_DIR}/Src/r328_hal_uart.c
+                     ${HAL_DIR}/Src/r328_hal_dma.c ${HAL_DIR}/Src/r328_hal_gic.c
+                     ${HAL_DIR}/Src/r328_hal_rcc.c
+)
+target_include_directories(
+    uart_async_tests PRIVATE ${HAL_DIR}/Inc ../Drivers/Device/Include ../Core/Inc
+)
+target_compile_definitions(uart_async_tests PRIVATE R328_HAL_HOST_TEST=1 _DEFAULT_SOURCE=1)
+target_compile_options(uart_async_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME uart_async_logic COMMAND uart_async_tests)
 add_executable(
     bus_register_tests
     bus_register_tests.c
@@ -81,6 +93,12 @@ target_include_directories(
 target_compile_definitions(display_example_tests PRIVATE R328_HAL_HOST_TEST=1)
 target_compile_options(display_example_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME display_example_protocol COMMAND display_example_tests)
+add_executable(runtime_tests runtime_tests.c ../Core/Src/runtime_r328.c)
+# Keep host libc untouched while testing the freestanding implementations.
+target_compile_definitions(runtime_tests PRIVATE memset=R328_Memset memcpy=R328_Memcpy
+                                                memmove=R328_Memmove memcmp=R328_Memcmp)
+target_compile_options(runtime_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG -fno-builtin)
+add_test(NAME freestanding_memory COMMAND runtime_tests)
 find_package(
     Python3
     COMPONENTS Interpreter

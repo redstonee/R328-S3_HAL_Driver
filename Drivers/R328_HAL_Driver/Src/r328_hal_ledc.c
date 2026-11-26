@@ -1,5 +1,11 @@
 #include "r328_hal_bus_private.h"
 
+static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
+void HAL_LEDC_SetPollingTimeout(uint32_t timeout)
+{
+    polling_timeout = timeout;
+}
+
 #define LEDC_ENABLE 1U
 #define LEDC_SOFT_RESET (1U << 1)
 #define LEDC_MSB_FIRST 0x3CU /* GRB bypass, all channels and combined word MSB first. */
@@ -96,8 +102,9 @@ HAL_StatusTypeDef HAL_LEDC_DeInit(LEDC_HandleTypeDef *handle)
 }
 
 HAL_StatusTypeDef HAL_LEDC_Transmit(LEDC_HandleTypeDef *handle, const uint32_t *colors,
-                                    uint32_t count, uint32_t timeout)
+                                    uint32_t count)
 {
+    const uint32_t timeout = polling_timeout;
     if (handle == NULL || handle->Instance != LEDC || colors == NULL || count == 0U ||
         count > LEDC_MAX_LEDS || count != handle->Init.LEDCount ||
         handle->State == HAL_LEDC_STATE_RESET)

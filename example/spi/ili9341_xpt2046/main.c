@@ -28,7 +28,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -39,6 +39,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -54,18 +55,17 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static void display_require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        HAL_UART_PrintValue(&huart0, label, status, UART_TIMEOUT_MS);
-        HAL_UART_PrintValue(&huart0, "SPI ErrorCode=", hspi1.ErrorCode, UART_TIMEOUT_MS);
+        HAL_UART_PrintValue(&huart0, label, status);
+        HAL_UART_PrintValue(&huart0, "SPI ErrorCode=", hspi1.ErrorCode);
         ILI9341_Backlight(0U);
         Error_Handler();
     }
@@ -91,13 +91,13 @@ int main(void)
     app_init("ILI9341 + XPT2046 / shared SPI1 / per-device clock / mode 0");
     display_require_ok("SPI/DMA init=", Display_SPI_Init());
     HAL_StatusTypeDef status = ILI9341_Init();
-    HAL_UART_PrintValue(&huart0, "ILI9341 init=", status, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "ILI9341 init=", status);
     display_require_ok("ILI9341 failed=", status);
-    HAL_UART_PrintValue(&huart0, "LCD actual SPI Hz=", hspi1.ActualBaudRateHz, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "LCD actual SPI Hz=", hspi1.ActualBaudRateHz);
     status = XPT2046_Init();
-    HAL_UART_PrintValue(&huart0, "XPT2046 init=", status, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "XPT2046 init=", status);
     display_require_ok("XPT2046 failed=", status);
-    HAL_UART_PrintValue(&huart0, "Touch actual SPI Hz=", hspi1.ActualBaudRateHz, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "Touch actual SPI Hz=", hspi1.ActualBaudRateHz);
 
     static const uint16_t fills[] = {ILI9341_RED, ILI9341_GREEN, ILI9341_BLUE};
     for (uint32_t i = 0U; i < sizeof(fills) / sizeof(fills[0]); ++i)
@@ -108,8 +108,7 @@ int main(void)
     color_bars();
     (void)HAL_UART_PrintString(&huart0,
                                "Touch to paint; c=restore bars; p=polling, i=interrupt, d=DMA.\r\n"
-                               "Mode changes redraw bars; initial calibration estimates.\r\n",
-                               UART_TIMEOUT_MS);
+                               "Mode changes redraw bars; initial calibration estimates.\r\n");
     uint32_t last_report = HAL_GetTick() - 200U;
     for (;;)
     {
@@ -127,19 +126,20 @@ int main(void)
             if ((uint32_t)(now - last_report) >= 200U)
             {
                 last_report = now;
-                (void)HAL_UART_PrintString(&huart0, "raw x=", UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintU32(&huart0, raw.x, UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintString(&huart0, " y=", UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintU32(&huart0, raw.y, UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintString(&huart0, " -> pixel x=", UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintU32(&huart0, x, UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintString(&huart0, " y=", UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintU32(&huart0, y, UART_TIMEOUT_MS);
-                (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
+                (void)HAL_UART_PrintString(&huart0, "raw x=");
+                (void)HAL_UART_PrintU32(&huart0, raw.x);
+                (void)HAL_UART_PrintString(&huart0, " y=");
+                (void)HAL_UART_PrintU32(&huart0, raw.y);
+                (void)HAL_UART_PrintString(&huart0, " -> pixel x=");
+                (void)HAL_UART_PrintU32(&huart0, x);
+                (void)HAL_UART_PrintString(&huart0, " y=");
+                (void)HAL_UART_PrintU32(&huart0, y);
+                (void)HAL_UART_PrintString(&huart0, "\r\n");
             }
         }
         uint8_t byte;
-        if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK)
+        if (HAL_UART_GetRxFifoLevel(&huart0) != 0U &&
+            HAL_UART_Receive(&huart0, &byte, 1U) == HAL_OK)
         {
             if (byte == 'p' || byte == 'i' || byte == 'd')
             {
@@ -147,14 +147,11 @@ int main(void)
                                         : byte == 'i' ? DISPLAY_SPI_INTERRUPT
                                                       : DISPLAY_SPI_DMA;
                 display_require_ok("SPI mode=", Display_SPI_SetMode(mode));
-                (void)HAL_UART_PrintString(&huart0,
-                                           byte == 'p'   ? "Mode=polling\r\n"
-                                           : byte == 'i' ? "Mode=interrupt\r\n"
-                                                         : "Mode=DMA\r\n",
-                                           UART_TIMEOUT_MS);
+                (void)HAL_UART_PrintString(&huart0, byte == 'p'   ? "Mode=polling\r\n"
+                                                    : byte == 'i' ? "Mode=interrupt\r\n"
+                                                                  : "Mode=DMA\r\n");
                 color_bars();
-                (void)HAL_UART_PrintString(&huart0, "Color bars complete; touch to paint.\r\n",
-                                           UART_TIMEOUT_MS);
+                (void)HAL_UART_PrintString(&huart0, "Color bars complete; touch to paint.\r\n");
             }
             else if (byte == 'c' || byte == 'C')
             {

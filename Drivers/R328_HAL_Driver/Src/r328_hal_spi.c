@@ -1,4 +1,10 @@
 #include "r328_hal_bus_private.h"
+
+static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
+void HAL_SPI_SetPollingTimeout(uint32_t timeout)
+{
+    polling_timeout = timeout;
+}
 #define SPI_XCH (1UL << 31)
 #define SPI_TC (1U << 12)
 #define SPI_FIFO_ERRORS (0xFU << 8)
@@ -255,18 +261,18 @@ static HAL_StatusTypeDef transfer(SPI_HandleTypeDef *handle, const uint8_t *tx, 
     }
     return finish(handle, HAL_OK);
 }
-HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
-                                   uint32_t timeout)
+HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size)
 {
+    const uint32_t timeout = polling_timeout;
     if (data == NULL && size != 0U)
     {
         return HAL_ERROR;
     }
     return transfer(handle, data, NULL, size, timeout);
 }
-HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *handle, uint8_t *data, uint32_t size,
-                                  uint32_t timeout)
+HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *handle, uint8_t *data, uint32_t size)
 {
+    const uint32_t timeout = polling_timeout;
     if (data == NULL && size != 0U)
     {
         return HAL_ERROR;
@@ -274,8 +280,9 @@ HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *handle, uint8_t *data, uint
     return transfer(handle, NULL, data, size, timeout);
 }
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *handle, const uint8_t *tx, uint8_t *rx,
-                                          uint32_t size, uint32_t timeout)
+                                          uint32_t size)
 {
+    const uint32_t timeout = polling_timeout;
     if ((tx == NULL || rx == NULL) && size != 0U)
     {
         return HAL_ERROR;

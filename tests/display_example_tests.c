@@ -6,6 +6,11 @@
 #include <assert.h>
 #include <stdio.h>
 
+static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
+void HAL_SPI_SetPollingTimeout(uint32_t timeout)
+{
+    polling_timeout = timeout;
+}
 static uint32_t gpio_h = UINT32_MAX;
 static uint32_t pen_down;
 static uint32_t tx_calls, fail_tx, touch_calls, fail_touch;
@@ -86,10 +91,9 @@ HAL_StatusTypeDef HAL_SPI_SetBaudRate(SPI_HandleTypeDef *handle, uint32_t hz)
     handle->ActualBaudRateHz = hz;
     return HAL_OK;
 }
-HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size,
-                                   uint32_t timeout)
+HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *data, uint32_t size)
 {
-    assert(handle == &hspi1 && selected() == DISPLAY_SPI_LCD && timeout != 0U);
+    assert(handle == &hspi1 && selected() == DISPLAY_SPI_LCD && polling_timeout != 0U);
     assert(handle->ActualBaudRateHz == ILI9341_SPI_HZ);
     ++tx_calls;
     if (tx_calls == fail_tx)
@@ -154,9 +158,10 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *handle, const uint8_t *dat
     return HAL_OK;
 }
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *handle, const uint8_t *tx, uint8_t *rx,
-                                          uint32_t size, uint32_t timeout)
+                                          uint32_t size)
 {
-    assert(handle == &hspi1 && selected() == DISPLAY_SPI_TOUCH && size == 3U && timeout != 0U);
+    assert(handle == &hspi1 && selected() == DISPLAY_SPI_TOUCH && size == 3U &&
+           polling_timeout != 0U);
     assert(handle->ActualBaudRateHz == XPT2046_SPI_HZ);
     assert(tx[0] == 0xD0U || tx[0] == 0x90U); /* PD=00, 12-bit differential. */
     assert(tx[1] == 0U && tx[2] == 0U);
@@ -202,26 +207,26 @@ static HAL_StatusTypeDef async_pending(HAL_StatusTypeDef result, uint32_t kind)
 HAL_StatusTypeDef HAL_SPI_Transmit_IT(SPI_HandleTypeDef *h, const uint8_t *data, uint32_t size)
 {
     ++it_calls;
-    return async_pending(HAL_SPI_Transmit(h, data, size, h->XferTimeout), 1U);
+    return async_pending(HAL_SPI_Transmit(h, data, size), 1U);
 }
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *h, const uint8_t *tx, uint8_t *rx,
                                              uint32_t size)
 {
     ++it_calls;
-    return async_pending(HAL_SPI_TransmitReceive(h, tx, rx, size, h->XferTimeout), 2U);
+    return async_pending(HAL_SPI_TransmitReceive(h, tx, rx, size), 2U);
 }
 HAL_StatusTypeDef HAL_SPI_Transmit_DMA(SPI_HandleTypeDef *h, const uint8_t *data, uint32_t size)
 {
     assert(h->hdmatx != NULL && h->hdmatx->Init.Direction == DMA_MEMORY_TO_PERIPH);
     ++dma_calls;
-    return async_pending(HAL_SPI_Transmit(h, data, size, h->XferTimeout), 1U);
+    return async_pending(HAL_SPI_Transmit(h, data, size), 1U);
 }
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *h, const uint8_t *tx, uint8_t *rx,
                                               uint32_t size)
 {
     assert(h->hdmatx != NULL && h->hdmarx != NULL && h->hdmatx != h->hdmarx);
     ++dma_calls;
-    return async_pending(HAL_SPI_TransmitReceive(h, tx, rx, size, h->XferTimeout), 2U);
+    return async_pending(HAL_SPI_TransmitReceive(h, tx, rx, size), 2U);
 }
 void HAL_SPI_Process(SPI_HandleTypeDef *h)
 {

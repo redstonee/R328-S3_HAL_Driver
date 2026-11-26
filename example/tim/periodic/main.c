@@ -25,7 +25,7 @@ static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
-        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status, UART_TIMEOUT_MS);
+        (void)HAL_UART_PrintValue(&huart0, label, (uint32_t)status);
         Error_Handler();
     }
 }
@@ -36,6 +36,7 @@ static void app_init(const char *banner)
         Error_Handler();
     }
     SystemClock_Config();
+    HAL_UART_SetPollingTimeout(UART_TIMEOUT_MS);
     /* This example explicitly chooses UART0 PH0/PH1, 115200 8N1 for diagnostics.
      * The framework itself does not reserve any UART or initialize these pins. */
     GPIO_InitTypeDef uart_pins = {.Pin = GPIO_PIN_0 | GPIO_PIN_1,
@@ -51,10 +52,9 @@ static void app_init(const char *banner)
     huart0.Init =
         (UART_InitTypeDef){115200U, UART_WORDLENGTH_8B, UART_STOPBITS_1, UART_PARITY_NONE};
     require_ok("UART init=", HAL_UART_Init(&huart0));
-    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ", UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, banner, UART_TIMEOUT_MS);
-    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n",
-                               UART_TIMEOUT_MS);
+    (void)HAL_UART_PrintString(&huart0, "\r\nR328 example: ");
+    (void)HAL_UART_PrintString(&huart0, banner);
+    (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
 static TIM_HandleTypeDef timer;
@@ -77,7 +77,7 @@ int main(void)
     {
         status = HAL_TIM_Base_Start_IT(&timer);
     }
-    HAL_UART_PrintValue(&huart0, "Timer1 init/start=", status, UART_TIMEOUT_MS);
+    HAL_UART_PrintValue(&huart0, "Timer1 init/start=", status);
     if (status != HAL_OK)
     {
         Error_Handler();
@@ -89,11 +89,11 @@ int main(void)
         if (events != last)
         {
             last = events;
-            (void)HAL_UART_PrintString(&huart0, "timer1=", UART_TIMEOUT_MS);
-            (void)HAL_UART_PrintU32(&huart0, events, UART_TIMEOUT_MS);
-            (void)HAL_UART_PrintString(&huart0, " tick=", UART_TIMEOUT_MS);
-            (void)HAL_UART_PrintU32(&huart0, HAL_GetTick(), UART_TIMEOUT_MS);
-            (void)HAL_UART_PrintString(&huart0, "\r\n", UART_TIMEOUT_MS);
+            (void)HAL_UART_PrintString(&huart0, "timer1=");
+            (void)HAL_UART_PrintU32(&huart0, events);
+            (void)HAL_UART_PrintString(&huart0, " tick=");
+            (void)HAL_UART_PrintU32(&huart0, HAL_GetTick());
+            (void)HAL_UART_PrintString(&huart0, "\r\n");
         }
         R328_WFI(); /* This example has an explicit periodic wakeup source. */
     }
