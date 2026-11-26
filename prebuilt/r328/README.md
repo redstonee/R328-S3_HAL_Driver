@@ -1,6 +1,10 @@
 # R328 启动 prebuilt
 
-只保留一个二进制：`boot0-spinand.bin`，32,768 字节。它包含 R328 的原厂 DDR 训练和 NAND 读取实现，供 SPI NAND / SPI NOR 冷启动复用。代码为 ARM / Thumb 混合，链接在 SRAM `0x20000`，版本标识 `553a5eb`。
+只保留一个二进制：`boot0-spinand.bin`，32,768 字节。它包含 R328 的原厂 DDR 训练和 NAND 读取实现，供 SPI NAND / SPI NOR 冷启动及 FEL DRAM loader 复用。代码为 ARM / Thumb 混合，链接在 SRAM `0x20000`，版本标识 `553a5eb`。
+
+[FEL DRAM loader](../../docs/fel-ddr.md) 构建时从该文件提取前 `0x3100` 字节，禁用 vendor `printf`，仅调用 `0x22DAD` 的 DDR 初始化入口，参数位于 `0x20038`。不执行 boot0 主函数，不读取 Flash，初始化后恢复 ROM SRAM 并返回 FEL。原始 prebuilt 保持不变。
+
+该 FEL 路径已实板确认：初始化报告 128 MiB，返回后的 USB FEL 通信正常，DDR 应用回读一致，串口 tick 和 LED 正常运行；验证范围见上述文档。
 
 `spinand.json` 保存 MX35LF1GE4AB（128 MiB，ID `C2 12`）配置、DDR 参数摘要和来源哈希，原 FS35 配置保存在 `spinand-fs35.json`；`spinor.json` 保存 W25Q64 NOR 布局及同一 DDR 参数摘要。原始系统镜像不参与构建，也不随工程保留。FES1、U-Boot、OP-TEE、DTB、rootfs 均不需要。
 

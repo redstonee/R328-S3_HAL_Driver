@@ -149,7 +149,7 @@ def validate_elf(data: bytes, origin: int, length: int, firmware: bytes | None =
         and data[:7] == b"\x7fELF\x01\x01\x01"
         and struct.unpack_from("<H", data, 18)[0] == 40
         and u32(data, 24) == origin,
-        f"Expected ARM ELF linked at 0x{origin:08x}; rebuild for Flash boot",
+        f"Expected ARM ELF linked at 0x{origin:08x}; rebuild for the selected memory",
     )
     offset = u32(data, 28)
     stride, count = struct.unpack_from("<HH", data, 42)
@@ -167,7 +167,7 @@ def validate_elf(data: bytes, origin: int, length: int, firmware: bytes | None =
                 filesz <= memsz
                 and virtual == physical
                 and origin <= virtual <= virtual + memsz <= origin + length,
-                "ELF load segment exceeds the Flash application region",
+                "ELF load segment exceeds the application region",
             )
             require(file_offset + filesz <= len(data), "ELF load segment exceeds the file")
             if filesz:

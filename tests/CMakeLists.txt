@@ -87,6 +87,7 @@ find_package(
     REQUIRED
 )
 add_test(NAME fel_loader COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_fel_load.py)
+add_test(NAME fel_ddr_host COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_fel_dram.py)
 
 add_executable(
     gpio_exti_tests gpio_exti_tests.c ${HAL_DIR}/Src/r328_hal_gpio.c

@@ -12,19 +12,19 @@
 
 ## 复制与运行
 
-先把自己的 `Core/Src/main.c` 备份到 `Core/Src/` 以外，按 [例程索引](../README.md) 清理之前例程的附加文件。从工程根目录执行：
+先把自己的 `Core/Src/main.c` 备份到 `Core/Src/` 以外，按 [例程索引](../README.md) 清理之前例程的附加文件。从工程根目录执行；使用 FEL DRAM loader，无需烧写 Flash：
 
 ```sh
 cp example/dram/memory/main.c Core/Src/main.c
-cmake --preset nand-debug
-cmake --build --preset nand-debug
-ctest --preset nand-debug
-# 进入 BROM FEL 后，重新烧写包含该例程的 NAND 启动镜像：
-cmake --build build/nand-debug --target fel-flash
-# 保持 FEL 键松开，然后复位或者重新上电；观察 PH0/PH1、115200 8N1 串口。
+cmake --preset fel-ddr-debug
+cmake --build --preset fel-ddr-debug
+ctest --preset fel-ddr-debug
+# 按住 FEL 键复位，进入后立即松开按键，再执行：
+cmake --build build/fel-ddr-debug --target fel-run
+# 观察 PH0/PH1、115200 8N1 串口。
 ```
 
-烧写只操作 NAND 前 4 MiB 启动区，详见 [NAND 烧写](../../docs/fel-nand.md)。也可使用 `nand-release`，或用 `nor-debug` / `nor-release` 打包为 NOR 镜像；NOR 烧写会覆盖整颗 8 MiB Flash。使用外部 loader 时，需先初始化 DRAM，再通过[自定义构建](../../README.md#构建配置)选择 DDR 并加载、执行应用。`fel-debug` 只加载到 SRAM，不会初始化 DRAM，本例会报告 `DRAM SKIP`。
+加载流程见 [FEL 下载到 DRAM](../../docs/fel-ddr.md)。也可使用 `fel-ddr-release`，或使用 `nand-debug` / `nand-release`、`nor-debug` / `nor-release` 打包冷启动镜像；Flash 烧写步骤见 [NAND](../../docs/fel-nand.md) 和 [NOR](../../docs/fel-nor.md)。外部 loader 需先初始化 DRAM，再通过[自定义构建](../../README.md#构建配置)选择 DDR。`fel-debug` 只加载到 SRAM，本例会报告 `DRAM SKIP`。
 
 测试前不要启动 DMA 或其他会使用空闲 DDR 的任务。本例使用配置的 128 MiB 地址窗口，不自动探测容量；若实际容量或地址译码不符，访问可能异常，别名还可能覆盖正在执行的程序。若要在未知容量下探测或覆盖包括代码、栈在内的整个 DDR，应使用运行于 SRAM 的初始化及测试程序。这里的 PASS 只覆盖打印出的地址范围和这些测试模式，不代替长时间压力、保持时间或温度测试。
 

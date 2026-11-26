@@ -1,5 +1,7 @@
 # FEL 下载到 SRAM
 
+程序 BIN 超过本文的 SRAM 暂存上限时，可用 [FEL DRAM loader](fel-ddr.md) 初始化 DDR 后直接下载运行，同样不擦写 Flash。
+
 `fel-debug` / `fel-release` 默认将 **128 KiB SRAM A1（`0x20000–0x3FFFF`）全部交给应用**，无需初始化 DDR。运行入口为 `0x20000`，栈顶为 `0x40000`。默认应用不配置 UART 或输出日志；交互例程自行配置 UART0 **PH0 TX / PH1 RX，AF3，115200 8N1**。
 
 ## 构建与运行

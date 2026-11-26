@@ -18,7 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(R328_MEMORY
     SRAM
-    CACHE STRING "Execution memory: SRAM or DDR (already initialized)"
+    CACHE STRING "Execution memory: SRAM or DDR"
 )
 set_property(CACHE R328_MEMORY PROPERTY STRINGS SRAM DDR)
 set(R328_BOOT_UART0_ROUTE
@@ -54,6 +54,10 @@ set(R328_NAND_PROFILE
 set(R328_FEL_IMAGE
     OFF
     CACHE BOOL "Build a raw SRAM image for BROM FEL loading"
+)
+set(R328_FEL_DDR_IMAGE
+    OFF
+    CACHE BOOL "Initialize DRAM through FEL, then download and execute the DDR application"
 )
 set(R328_FEL_SRAM_PROFILE
     FULL
@@ -98,6 +102,16 @@ configure_file(linker/r328_ram.ld.in ${CMAKE_CURRENT_BINARY_DIR}/r328_ram.ld @ON
 if(R328_FEL_IMAGE AND (NOT R328_MEMORY STREQUAL "SRAM" OR NOT R328_GIC_SECURITY STREQUAL "SECURE"))
     message(FATAL_ERROR "BROM FEL requires SRAM and SECURE GIC; use --preset fel-debug")
 endif()
+if(R328_FEL_DDR_IMAGE)
+    if(R328_FEL_IMAGE
+       OR R328_NAND_IMAGE
+       OR R328_NOR_IMAGE
+       OR NOT R328_MEMORY STREQUAL "DDR"
+       OR NOT R328_GIC_SECURITY STREQUAL "SECURE"
+    )
+        message(FATAL_ERROR "FEL DDR requires DDR, SECURE GIC and no Flash/SRAM image; use fel-ddr-debug")
+    endif()
+endif()
 if(R328_NAND_IMAGE AND R328_NOR_IMAGE)
     message(FATAL_ERROR "Select only one Flash medium: SPI NAND or SPI NOR")
 endif()
@@ -139,7 +153,7 @@ target_include_directories(
 if(R328_GIC_SECURITY STREQUAL "NONSECURE")
     target_compile_definitions(r328_options INTERFACE R328_GIC_NONSECURE=1)
 endif()
-if(R328_FEL_IMAGE)
+if(R328_FEL_IMAGE OR R328_FEL_DDR_IMAGE)
     target_compile_definitions(r328_options INTERFACE R328_BOOT_FEL=1)
 endif()
 
@@ -198,6 +212,7 @@ add_custom_command(
 include(CTest)
 if(BUILD_TESTING
    OR R328_FEL_IMAGE
+   OR R328_FEL_DDR_IMAGE
    OR R328_NAND_IMAGE
    OR R328_NOR_IMAGE
 )
@@ -206,6 +221,9 @@ if(BUILD_TESTING
         COMPONENTS Interpreter
         REQUIRED
     )
+endif()
+if(R328_FEL_DDR_IMAGE)
+    include(cmake/fel-ddr.cmake)
 endif()
 if(R328_NAND_IMAGE)
     set(nand_tool "${CMAKE_CURRENT_SOURCE_DIR}/tools/nand_image.py")

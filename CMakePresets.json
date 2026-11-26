@@ -19,7 +19,8 @@
         "R328_FEL_IMAGE": "OFF",
         "R328_GIC_SECURITY": "SECURE",
         "R328_NAND_IMAGE": "OFF",
-        "R328_NOR_IMAGE": "OFF"
+        "R328_NOR_IMAGE": "OFF",
+        "R328_FEL_DDR_IMAGE": "OFF"
       }
     },
     {
@@ -49,6 +50,22 @@
         "R328_MEMORY": "DDR",
         "R328_DDR_ORIGIN": "0x40000000",
         "R328_DDR_LENGTH": "0x08000000"
+      }
+    },
+    {
+      "name": "fel-ddr-debug",
+      "inherits": "ddr-debug",
+      "displayName": "R328-S3 FEL to DDR (128 MiB), Debug",
+      "cacheVariables": {
+        "R328_FEL_DDR_IMAGE": "ON"
+      }
+    },
+    {
+      "name": "fel-ddr-release",
+      "inherits": "fel-ddr-debug",
+      "displayName": "R328-S3 FEL to DDR (128 MiB), Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
       }
     },
     {
@@ -119,6 +136,14 @@
       "configurePreset": "fel-release"
     },
     {
+      "name": "fel-ddr-debug",
+      "configurePreset": "fel-ddr-debug"
+    },
+    {
+      "name": "fel-ddr-release",
+      "configurePreset": "fel-ddr-release"
+    },
+    {
       "name": "ddr-debug",
       "hidden": true,
       "configurePreset": "ddr-debug"
@@ -168,6 +193,20 @@
     {
       "name": "fel-release",
       "configurePreset": "fel-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-ddr-debug",
+      "configurePreset": "fel-ddr-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fel-ddr-release",
+      "configurePreset": "fel-ddr-release",
       "output": {
         "outputOnFailure": true
       }

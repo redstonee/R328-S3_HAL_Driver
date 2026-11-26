@@ -66,10 +66,13 @@ cmake --build build/fel-debug --target fel-run
 | --- | --- |
 | `fel-debug` / `fel-release` | BROM FEL 加载，128 KiB SRAM 运行 |
 | `fel-direct` | 原 32 KiB SRAM FEL 回退配置 |
+| `fel-ddr-debug` / `fel-ddr-release` | FEL loader 初始化 DRAM，再下载到 128 MiB DDR，不读写 Flash |
 | `nand-debug` / `nand-release` | SPI NAND 冷启动，boot0 初始化 DDR 后直接执行应用 |
 | `nor-debug` / `nor-release` | W25Q64 SPI NOR 冷启动，初始化 DDR 后直接执行应用 |
 
 NAND 构建使用工程内的必要 prebuilt，命令及页布局见 [NAND 与 DDR 说明](../docs/nand-image.md)。W25Q64 使用相同应用源码，NOR 连接和线性镜像见 [SPI NOR 说明](../docs/nor-image.md)，通过 USB FEL 烧写见 [xfel NOR 烧写](../docs/fel-nor.md)。
+
+频繁验证较大的程序或运行 DRAM 测试时，可使用 [FEL DDR](../docs/fel-ddr.md)，无需烧写启动镜像。
 
 xfel 不在 PATH 时，配置阶段增加 `-DR328_XFEL=/absolute/path/to/xfel`。产物位于 `build/<预设名>/`；默认 FEL 暂存于 `0x28000`，通过引导搬到 `0x20000` 执行，运行总容量为 128 KiB，应用 BIN 上限为 64 KiB。普通构建和 CTest 不访问设备，详见 [FEL 说明](../docs/fel-sram.md)。
 

@@ -28,6 +28,10 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 
 `fel-run` 校验芯片 ID，将程序暂存于 `0x28000`，回读比较后通过 scratchpad 引导搬到 `0x20000` 执行，运行时使用完整 128 KiB SRAM；普通构建和 CTest 不访问 USB。详见 [FEL 下载说明](docs/fel-sram.md)。
 
+较大的程序可使用 `fel-ddr-debug` / `fel-ddr-release`：SRAM loader 初始化 DRAM 后返回 FEL，再下载应用到 `0x40000000`、回读校验并运行，使用 128 MiB DDR 窗口，**不读写 Flash**。执行 `cmake --preset fel-ddr-debug`、`cmake --build --preset fel-ddr-debug`，进入 FEL 并松开按键后运行 `cmake --build build/fel-ddr-debug --target fel-run`。详见 [FEL 下载到 DRAM](docs/fel-ddr.md)。
+
+FEL DDR 已通过实板初始化、返回 FEL、应用下载 / 回读及执行验证，串口 tick 与 LED 正常；大 BIN 的多块传输目前由主机测试覆盖。
+
 应用源码统一放在 `Core/Src/`，头文件放在 `Core/Inc/`。运行例程时，将对应的 `main.c` 和设备文件复制到 `Core`，继续使用相同的内存 / 加载预设。每个例程独立完成初始化，按需使用 UART0 PH0/PH1、115200 8N1 输出诊断；框架不设置全局 console。复制步骤见 [例程索引](example/README.md)，显示与触摸见 [ILI9341 + XPT2046](example/spi/ili9341_xpt2046/README.md)。
 
 ## 功能
@@ -57,6 +61,7 @@ SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初�
 | --- | --- | --- |
 | `fel-debug` / `fel-release` | `0x20000`，128 KiB | 复位后的 BROM FEL，scratchpad 引导搬运 |
 | `fel-direct` | `0x28000`，32 KiB | 原先的保守 FEL 布局，供回退 |
+| `fel-ddr-debug` / `fel-ddr-release` | `0x40000000`，128 MiB | FEL 中初始化 DRAM，返回后下载应用，不读写 Flash |
 | `nand-debug` / `nand-release` | `0x40000000`，128 MiB | SPI NAND 冷启动，boot0 初始化 DDR 后直接执行应用 |
 | `nor-debug` / `nor-release` | `0x40000000`，128 MiB | W25Q64 SPI NOR 冷启动，源码读取器加载应用 |
 
@@ -78,7 +83,9 @@ MX35LF1GE4AB 已通过全量回读及断电冷启动验证，应用 tick 正常�
 
 W25Q64 使用 `cmake --preset nor-debug`、`cmake --build --preset nor-debug`，生成 **8 MiB** 的 `build/nor-debug/firmware-nor.bin`，从 Flash 地址 0 写入；应用包位于 `0x10000`。进入 BROM FEL 并立即松开 FEL 键后可用 `cmake --build build/nor-debug --target fel-probe` 检测、`--target fel-flash` 整片擦写并回读校验，无需修改原版 xfel；**烧写会覆盖整颗 8 MiB Flash**。使用 SPI0 的 PC0 / PC2 / PC3 / PC4，boot0 日志默认 PH0 / PH1，应用自行配置 UART。接线和布局见 [SPI NOR 说明](docs/nor-image.md)，USB 烧写步骤见 [xfel NOR 烧写](docs/fel-nor.md)。擦写和冷启动均尚未实板验证。
 
-每个构建目录生成 `firmware.elf`、`firmware.bin`、`firmware.hex`、`firmware.map` 和 `compile_commands.json`。FEL 配置另生成 `firmware-fel.bin` 与描述地址、长度、SHA256 的 `firmware-fel.json`；FULL 配置还生成配套的 `firmware-fel-loader.bin`。
+每个构建目录生成 `firmware.elf`、`firmware.bin`、`firmware.hex`、`firmware.map` 和 `compile_commands.json`。SRAM FEL 配置另生成 `firmware-fel.bin` 与描述地址、长度、SHA256 的 `firmware-fel.json`；FULL 配置还生成配套的 `firmware-fel-loader.bin`。
+
+FEL DDR 配置使用 `firmware.bin`，另生成 `fel-dram-loader.bin`、`fel-dram-vendor.bin` 和 `firmware-fel-ddr.json`，不需要 Flash 镜像或 TOC 包。
 
 自定义构建：
 
@@ -100,6 +107,7 @@ cmake --build build/custom
 | `R328_NAND_IMAGE` | 启用 SPI NAND 直接启动头部和镜像打包 |
 | `R328_NAND_PROFILE` | NAND 配置路径，默认 `prebuilt/r328/spinand.json`（MX35LF1GE4AB） |
 | `R328_NOR_IMAGE` | 启用 W25Q64 NOR 读取器和镜像打包，与 NAND / FEL 互斥 |
+| `R328_FEL_DDR_IMAGE` | 启用可返回 FEL 的 DRAM loader 和 DDR 下载，与 SRAM FEL / Flash 镜像互斥 |
 | `R328_FEL_SRAM_PROFILE` | `FULL`（默认，128 KiB，搬运）或 `DIRECT`（32 KiB，直接执行） |
 | `R328_XFEL` | xfel 可执行文件路径 |
 | `BUILD_TESTING` | 是否启用构建产物检查，默认开启 |
@@ -115,6 +123,7 @@ Drivers/R328_HAL_Driver/    HAL 公共接口和实现
 prebuilt/r328/             必要的 32 KiB boot0 二进制与 NAND / NOR 配置
 example/                   各外设独立例程及显示、触摸测试
 boot/nor/                  从源码构建的 SPI NOR 启动读取器
+boot/dram/                 可返回 FEL 的 DRAM 初始化 loader
 cmake/                     CMake的GNU Arm 工具链配置文件
 linker/                    RAM 链接脚本模板
 tests/                     主机模型测试和 ARM 产物检查
@@ -131,6 +140,7 @@ HAL 仅支持 CPU0，句柄锁通过 CPU0 IRQ 临界区保护，不提供跨核�
 ## 文档与验证
 
 - [FEL 下载与 SRAM 布局](docs/fel-sram.md)
+- [FEL 初始化 DRAM 并下载大程序](docs/fel-ddr.md)
 - [SPI NAND 烧录包与 DDR 初始化](docs/nand-image.md)
 - [W25Q64 SPI NOR 镜像与接线](docs/nor-image.md)
 - [通过 xfel 烧写 W25Q64](docs/fel-nor.md)
