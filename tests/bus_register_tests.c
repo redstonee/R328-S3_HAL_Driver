@@ -42,6 +42,33 @@ static uint32_t spi_tx_count, spi_rx_count, spi_rx_pos, spi_log_count, spi_burst
 static uint32_t twi_active, twi_address, twi_read, twi_starts, twi_stops, twi_rx_count;
 static uint8_t twi_log[64], twi_ack[64];
 static uint32_t twi_log_count;
+static int async_model;
+static uint32_t completed, errors;
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *h)
+{
+    assert(h->Lock == HAL_UNLOCKED);
+    ++completed;
+}
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *h)
+{
+    assert(h->Lock == HAL_UNLOCKED);
+    ++completed;
+}
+void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *h)
+{
+    assert(h->Lock == HAL_UNLOCKED);
+    ++completed;
+}
+void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *h)
+{
+    assert(h->Lock == HAL_UNLOCKED);
+    ++completed;
+}
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *h)
+{
+    assert(h->Lock == HAL_UNLOCKED);
+    ++errors;
+}
 
 static void map_region(uintptr_t address, size_t size)
 {
@@ -72,6 +99,26 @@ uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
 }
 void R328_HAL_TestWrite32(volatile uint32_t *reg, uint32_t value)
 {
+    if (reg == &DMA->IRQ_PEND[0] || reg == &DMA->IRQ_PEND[1])
+    {
+        *reg &= ~value;
+        return;
+    }
+    if (reg == &I2C1->DRV_INT_CTRL)
+    {
+        *reg = (value & ~0xFU) | ((*reg & 0xFU) & ~(value & 0xFU));
+        return;
+    }
+    if (reg == &I2C1->DRV_FIFO_CON)
+    {
+        *reg = stuck_reset ? value : 0U;
+        return;
+    }
+    if (reg == &I2C1->DRV_SEND_FIFO)
+    {
+        assert(twi_log_count < sizeof(twi_log));
+        twi_log[twi_log_count++] = (uint8_t)value;
+    }
     if (reg == &RCC_PLL_AUDIO_CTRL)
     {
         *reg = value | (((value & (1UL << 31)) != 0U && !stuck_pll) ? 1UL << 28 : 0U);
@@ -139,7 +186,7 @@ void R328_HAL_TestWrite32(volatile uint32_t *reg, uint32_t value)
     }
     if (reg == &I2C1->CNTR)
     {
-        assert((value & 0x80U) == 0U); /* polling must not enable TWI IRQ */
+        assert(async_model || (value & 0x80U) == 0U); /* Polling must not enable IRQ. */
         if ((value & 0x10U) != 0U)
         {
             ++twi_stops;
@@ -218,6 +265,11 @@ uint8_t R328_HAL_TestRead8(volatile uint32_t *reg)
 }
 void R328_HAL_TestWrite8(volatile uint32_t *reg, uint8_t value)
 {
+    if (reg == &I2C1->DRV_SEND_FIFO)
+    {
+        R328_HAL_TestWrite32(reg, value);
+        return;
+    }
     assert(reg == &model_spi->TXD && spi_tx_count < 64U && spi_log_count < sizeof(spi_log));
     spi_tx[spi_tx_count++] = value;
     spi_log[spi_log_count++] = value;
@@ -435,9 +487,228 @@ static void test_i2s(void)
     assert(I2S0->TXCHSEL[0] == 0x10003U && I2S0->CLKD == 0x152U);
     assert(HAL_I2S_DeInit(&hi2s0) == HAL_OK);
 }
+
+static void pump_i2c(void)
+{
+    for (uint32_t i = 0U; hi2c1.State == HAL_I2C_STATE_BUSY && i < 100U; ++i)
+    {
+        HAL_I2C_IRQHandler(&hi2c1);
+        HAL_I2C_Process(&hi2c1);
+    }
+    assert(hi2c1.State != HAL_I2C_STATE_BUSY);
+}
+static void model_dma_run(DMA_HandleTypeDef *h)
+{
+    uint32_t channel = h->Init.Channel;
+    assert(DMA->CHANNEL[channel].EN == 1U);
+    assert(DMA->CHANNEL[channel].MODE == 0xCU); /* DRQ handshake, including byte RX. */
+    assert(DMA->CHANNEL[channel].DESC == (uint32_t)(uintptr_t)h->Descriptor);
+    assert(h->Descriptor[5] == 0xFFFFF800U);
+    if (h->Init.Direction == DMA_PERIPH_TO_MEMORY)
+    {
+        assert((h->Descriptor[0] & 0xFFFFU) == (46U | 1U << 8));
+        assert(h->Descriptor[1] == (uint32_t)(uintptr_t)&I2C1->DRV_RECV_FIFO);
+        uint8_t *out = (void *)(uintptr_t)h->Descriptor[2];
+        for (uint32_t i = 0U; i < h->Descriptor[3]; ++i)
+        {
+            out[i] = (uint8_t)(0x60U + i);
+        }
+    }
+    else
+    {
+        assert((h->Descriptor[0] >> 16) == (46U | 1U << 8));
+        assert(h->Descriptor[2] == (uint32_t)(uintptr_t)&I2C1->DRV_SEND_FIFO);
+        const uint8_t *in = (void *)(uintptr_t)h->Descriptor[1];
+        for (uint32_t i = 0U; i < h->Descriptor[3]; ++i)
+        {
+            R328_HAL_TestWrite32(&I2C1->DRV_SEND_FIFO, in[i]);
+        }
+    }
+    DMA->CHANNEL[channel].LEFT = 0U;
+    DMA->CHANNEL[channel].EN = 0U;
+    DMA->IRQ_PEND[channel / 8U] |= 4UL << ((channel % 8U) * 4U);
+    HAL_DMA_IRQHandler(h);
+}
+static void packet_done(uint32_t error)
+{
+    I2C1->DRV_CTRL = error == 0U ? 0U : (1U << 24) | (error << 16);
+    I2C1->DRV_INT_CTRL |= error == 0U ? 1U : 2U;
+    HAL_I2C_IRQHandler(&hi2c1);
+}
+static void test_i2c_async(void)
+{
+    async_model = 1;
+    clear_twi_model();
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 1000U) == HAL_OK);
+    uint8_t bytes[24];
+    assert(HAL_I2C_Mem_Read_IT(&hi2c1, 0x76U << 1, 0x88U, 1U, bytes, sizeof(bytes)) == HAL_OK);
+    assert(completed == 0U && hi2c1.State == HAL_I2C_STATE_BUSY && twi_log_count == 0U);
+    assert(HAL_I2C_Master_Receive_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_BUSY);
+    assert(HAL_I2C_DeInit(&hi2c1) == HAL_BUSY && HAL_I2C_Init(&hi2c1) == HAL_BUSY);
+    pump_i2c();
+    assert(completed == 1U && errors == 0U && twi_starts == 2U && twi_stops == 1U);
+    const uint8_t expected[] = {0xECU, 0x88U, 0xEDU};
+    assert(twi_log_count == sizeof(expected) && memcmp(twi_log, expected, sizeof(expected)) == 0);
+    for (uint32_t i = 0U; i < sizeof(bytes); ++i)
+    {
+        assert(bytes[i] == 0x60U + i);
+        assert(twi_ack[i] == (i + 1U < sizeof(bytes)));
+    }
+    clear_twi_model();
+    assert(HAL_I2C_Mem_Write_IT(&hi2c1, 0xECU, 0x1234U, 2U, bytes, 2U) == HAL_OK);
+    pump_i2c();
+    const uint8_t write[] = {0xECU, 0x12U, 0x34U, 0x60U, 0x61U};
+    assert(twi_log_count == sizeof(write) && memcmp(twi_log, write, sizeof(write)) == 0);
+    clear_twi_model();
+    assert(HAL_I2C_Master_Receive_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
+    pump_i2c();
+    assert(twi_ack[0] == 0U && twi_log[0] == 0xEDU);
+    clear_twi_model();
+    twi_nack = 1;
+    assert(HAL_I2C_Master_Transmit_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
+    pump_i2c();
+    assert(errors == 1U && hi2c1.ErrorCode == HAL_I2C_ERROR_AF && twi_stops == 1U);
+    clear_twi_model();
+    twi_arlo = 1;
+    assert(HAL_I2C_Master_Transmit_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
+    pump_i2c();
+    assert(errors == 2U && hi2c1.ErrorCode == HAL_I2C_ERROR_ARLO && twi_stops == 0U);
+    clear_twi_model();
+    twi_stall = 1;
+    tick = UINT32_MAX - 3U;
+    assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 5U) == HAL_OK);
+    assert(HAL_I2C_Master_Receive_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
+    pump_i2c();
+    assert(errors == 3U && hi2c1.ErrorCode == HAL_I2C_ERROR_TIMEOUT);
+    assert(hi2c1.State == HAL_I2C_STATE_RESET);
+    clear_twi_model();
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_Master_Receive_IT(&hi2c1, 0xECU, bytes, 1U) == HAL_OK);
+    assert(HAL_I2C_Abort(&hi2c1) == HAL_OK);
+    assert(errors == 4U && hi2c1.State == HAL_I2C_STATE_RESET);
+    clear_twi_model();
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 1000U) == HAL_OK);
+    static DMA_HandleTypeDef rx = {.Init = {8U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_TWI1}};
+    static DMA_HandleTypeDef tx = {.Init = {1U, DMA_MEMORY_TO_PERIPH, DMA_REQUEST_TWI1}};
+    assert(HAL_DMA_Init(&rx) == HAL_OK && HAL_DMA_Init(&tx) == HAL_OK);
+    assert((RCC_DMA_BGR & 0x10001U) == 0x10001U && (RCC_MBUS_MAT_CLK_GATING & 1U) != 0U);
+    DMA_HandleTypeDef other = {.Init = {8U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_TWI1}};
+    assert(HAL_DMA_Init(&other) == HAL_BUSY); /* No channel stealing. */
+    hi2c1.hdmarx = &rx;
+    hi2c1.hdmatx = &tx;
+    uint8_t *buffer = (void *)(uintptr_t)0x28000U;
+    for (uint32_t order = 0U; order < 2U; ++order)
+    {
+        clear_twi_model();
+        uint32_t before = completed;
+        assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
+        assert(I2C1->DRV_FMT == 0x10006U && I2C1->DRV_SLV == 0xED00U);
+        assert((I2C1->DRV_CTRL & (1UL << 29)) == 0U); /* repeated START */
+        assert(twi_log_count == 1U && twi_log[0] == 0xF7U);
+        if (order == 0U)
+        {
+            model_dma_run(&rx);
+        }
+        else
+        {
+            packet_done(0U);
+        }
+        HAL_I2C_Process(&hi2c1);
+        assert(completed == before && hi2c1.State == HAL_I2C_STATE_BUSY);
+        if (order == 0U)
+        {
+            packet_done(0U);
+        }
+        else
+        {
+            model_dma_run(&rx);
+        }
+        HAL_I2C_Process(&hi2c1);
+        assert(completed == before + 1U && hi2c1.State == HAL_I2C_STATE_READY);
+        assert(buffer[0] == 0x60U && buffer[5] == 0x65U);
+        HAL_I2C_Process(&hi2c1);
+        assert(completed == before + 1U); /* exactly one callback */
+    }
+    clear_twi_model();
+    assert(HAL_I2C_Mem_Write_DMA(&hi2c1, 0xECU, 0xF4U, 1U, buffer, 2U) == HAL_OK);
+    model_dma_run(&tx);
+    packet_done(0U);
+    HAL_I2C_Process(&hi2c1);
+    assert(twi_log_count == 3U && twi_log[0] == 0xF4U && twi_log[1] == 0x60U);
+    assert(hi2c1.State == HAL_I2C_STATE_READY);
+    clear_twi_model();
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0x1234U, 2U, buffer, 48U) == HAL_OK);
+    assert(twi_log_count == 2U && twi_log[0] == 0x12U && twi_log[1] == 0x34U);
+    model_dma_run(&rx);
+    packet_done(0U);
+    HAL_I2C_Process(&hi2c1);
+    assert(buffer[47] == 0x8FU && hi2c1.State == HAL_I2C_STATE_READY);
+    clear_twi_model();
+    uint32_t residual_errors = errors, residual_completed = completed;
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
+    model_dma_run(&rx);
+    packet_done(0U);
+    I2C1->DRV_FIFO_CON = 3U << 16; /* Queue ended but three sensor bytes remain. */
+    HAL_I2C_Process(&hi2c1);
+    assert(errors == residual_errors + 1U && completed == residual_completed);
+    assert(hi2c1.ErrorCode == HAL_I2C_ERROR_DMA && hi2c1.State == HAL_I2C_STATE_RESET);
+    I2C1->DRV_FIFO_CON = 0U;
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    clear_twi_model();
+    assert(HAL_I2C_Master_Transmit_DMA(&hi2c1, 0xECU, buffer, 48U) == HAL_OK);
+    model_dma_run(&tx);
+    packet_done(0U);
+    HAL_I2C_Process(&hi2c1);
+    assert(twi_log_count == 48U && twi_log[47] == 0x8FU);
+    assert(HAL_I2C_Master_Receive_DMA(&hi2c1, 0xECU, buffer, 6U) == HAL_OK);
+    assert((I2C1->DRV_CTRL & (1UL << 28)) != 0U && I2C1->DRV_FMT == 6U);
+    packet_done(0x48U);
+    HAL_I2C_Process(&hi2c1);
+    assert(hi2c1.ErrorCode == HAL_I2C_ERROR_AF && rx.State == HAL_DMA_STATE_READY);
+    assert(hi2c1.State == HAL_I2C_STATE_RESET);
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    tick = UINT32_MAX - 3U;
+    assert(HAL_I2C_SetAsyncTimeout(&hi2c1, 5U) == HAL_OK);
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
+    pump_i2c(); /* Neither controller nor DMA completes. */
+    assert(hi2c1.ErrorCode == HAL_I2C_ERROR_TIMEOUT && rx.State == HAL_DMA_STATE_READY);
+    assert(DMA->CHANNEL[8].EN == 0U);
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 65536U) == HAL_ERROR);
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, (void *)0xFFFFFFFEU, 6U) == HAL_ERROR);
+    assert(hi2c1.Lock == HAL_UNLOCKED);
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
+    uint32_t before_errors = errors;
+    DMA->STATUS |= 1U << 8;
+    assert(HAL_I2C_Abort(&hi2c1) == HAL_TIMEOUT);
+    assert(hi2c1.State == HAL_I2C_STATE_BUSY && hi2c1.Lock == HAL_LOCKED);
+    assert(errors == before_errors); /* No buffer release until DMA actually stops. */
+    DMA->STATUS &= ~(1U << 8);
+    HAL_I2C_Process(&hi2c1);
+    assert(hi2c1.State == HAL_I2C_STATE_RESET && errors == before_errors + 1U);
+    assert(Board_I2C1_Init(100000U) == HAL_OK);
+    assert(HAL_I2C_Mem_Read_DMA(&hi2c1, 0xECU, 0xF7U, 1U, buffer, 6U) == HAL_OK);
+    DMA->CHANNEL[8].LEFT = 3U; /* Queue completion with partial data is an error. */
+    DMA->IRQ_PEND[1] |= 4U;
+    HAL_DMA_IRQHandler(&rx);
+    HAL_I2C_Process(&hi2c1);
+    assert((hi2c1.ErrorCode & HAL_I2C_ERROR_DMA) != 0U && hi2c1.State == HAL_I2C_STATE_RESET);
+    assert(HAL_DMA_DeInit(&rx) == HAL_OK && HAL_DMA_DeInit(&tx) == HAL_OK);
+    hi2c1.hdmatx = NULL;
+    hi2c1.hdmarx = NULL;
+    assert(HAL_I2C_DeInit(&hi2c1) == HAL_OK);
+    async_model = 0;
+}
 int main(void)
 {
     map_region(0x03000000U, 0x10000U);
+    map_region(0x03021000U, 0x2000U);
+    map_region(0x00020000U, 0x20000U);
+    R328_REG32(R328_GICD_BASE + 4U) = 5U;
+    assert(HAL_GIC_Init() == HAL_OK);
     map_region(0x05002000U, 0x1000U);
     map_region(0x05010000U, 0x2000U);
     map_region(0x05090000U, 0x3000U);
@@ -446,6 +717,7 @@ int main(void)
     GPIOH->CFG[0] = 0x33U;  /* Existing PH0/1 UART mux must survive. */
     test_spi();
     test_i2c();
+    test_i2c_async();
     test_i2s();
     assert((GPIOH->CFG[0] & 0xFFU) == 0x33U);
     assert((RCC_SPI_BGR & 0x10001U) == 0x10001U);

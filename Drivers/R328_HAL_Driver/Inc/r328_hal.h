@@ -6,6 +6,7 @@
 #include "r328_hal_gpio.h"
 #include "r328_hal_uart.h"
 #include "r328_hal_spi.h"
+#include "r328_hal_dma.h"
 #include "r328_hal_i2c.h"
 #include "r328_hal_i2s.h"
 #include "r328_hal_tim.h"

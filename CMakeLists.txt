@@ -153,6 +153,7 @@ add_library(
     Drivers/R328_HAL_Driver/Src/r328_hal_uart.c
     Drivers/R328_HAL_Driver/Src/r328_hal_spi.c
     Drivers/R328_HAL_Driver/Src/r328_hal_i2c.c
+    Drivers/R328_HAL_Driver/Src/r328_hal_dma.c
     Drivers/R328_HAL_Driver/Src/r328_hal_i2s.c
     Drivers/R328_HAL_Driver/Src/r328_hal_ledc.c
     Drivers/R328_HAL_Driver/Src/r328_hal_bus_rcc.c

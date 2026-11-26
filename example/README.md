@@ -20,6 +20,7 @@
 | I²C | [scan](i2c/scan/main.c) | 扫描 0x08–0x77，支持重新扫描 |
 | I²C | [memory](i2c/memory/main.c) | 可配置设备与寄存器地址，重复 START 读取 |
 | [I²S](i2s/README.md) | [silence](i2s/silence/main.c) | 48 kHz 有限静音块 |
+| I²C | [bmp280](i2c/bmp280/README.md) | 0x76 BMP280，轮询 / IRQ / DMA 温度气压对比 |
 | I²S | [tone](i2s/tone/main.c) | 200 ms PCM16 正弦波、左右声道单独测试 |
 | [LEDC](ledc/README.md) | [ws2812](ledc/ws2812/main.c) | 4 颗 WS2812，颜色、流水与呼吸灯效 |
 | [SRAM](sram/README.md) | [memory](sram/memory/main.c) | 完整 SRAM 配置下的空闲区写入 / 回读 |
@@ -50,6 +51,7 @@ cmake --build build/fel-debug --target fel-run
 | --- | --- | --- |
 | GPIO 的三个例程 | 无 | `gpio/gpio_example.h` |
 | I²C memory | 无 | `i2c/memory/config.h` |
+| I²C BMP280 | `i2c/bmp280/bmp280.c` | `i2c/bmp280/bmp280.h` |
 | SPI 显示 / 触摸 | `spi/ili9341/ili9341.c`、`spi/ili9341/xpt2046.c` | `spi/ili9341/ili9341.h`、`spi/ili9341/xpt2046.h` |
 | 其余例程 | 无 | 无 |
 

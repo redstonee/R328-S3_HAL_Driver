@@ -23,6 +23,8 @@ add_executable(
     bus_register_tests.c
     ${HAL_DIR}/Src/r328_hal_spi.c
     ${HAL_DIR}/Src/r328_hal_i2c.c
+    ${HAL_DIR}/Src/r328_hal_dma.c
+    ${HAL_DIR}/Src/r328_hal_gic.c
     ${HAL_DIR}/Src/r328_hal_i2s.c
     ${HAL_DIR}/Src/r328_hal_bus_rcc.c
     ${HAL_DIR}/Src/r328_hal_rcc.c
@@ -38,6 +40,10 @@ target_compile_definitions(
 )
 target_compile_options(bus_register_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME bus_register_logic COMMAND bus_register_tests)
+add_executable(bmp280_tests bmp280_tests.c ../example/i2c/bmp280/bmp280.c)
+target_include_directories(bmp280_tests PRIVATE ../example/i2c/bmp280)
+target_compile_options(bmp280_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME bmp280_compensation COMMAND bmp280_tests)
 add_executable(
     ledc_register_tests
     ledc_register_tests.c ${HAL_DIR}/Src/r328_hal_ledc.c ${HAL_DIR}/Src/r328_hal_bus_rcc.c

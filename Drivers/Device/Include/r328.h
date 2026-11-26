@@ -22,6 +22,8 @@
 #define RCC_APB2_CFG R328_CCU_REG(0x0524U)
 #define RCC_UART_BGR R328_CCU_REG(0x090CU)
 #define RCC_TWI_BGR R328_CCU_REG(0x091CU)
+#define RCC_DMA_BGR R328_CCU_REG(0x070CU)
+#define RCC_MBUS_MAT_CLK_GATING R328_CCU_REG(0x0804U)
 #define RCC_SPI_CLK(index) R328_CCU_REG(0x0940U + 4U * (index))
 #define RCC_SPI_BGR R328_CCU_REG(0x096CU)
 #define RCC_I2S_CLK(index) R328_CCU_REG(0x0A10U + 4U * (index))
@@ -101,12 +103,38 @@ typedef struct
 {
     __IO uint32_t ADDR, XADDR, DATA, CNTR, STAT, CCR, SRST, EFR, LCR;
     uint32_t RESERVED[(0x200U - 0x24U) / 4U];
-    __IO uint32_t DRV_CTRL;
+    __IO uint32_t DRV_CTRL, DRV_CFG, DRV_SLV, DRV_FMT, DRV_BUS_CTRL;
+    __IO uint32_t DRV_INT_CTRL, DRV_DMA_CFG, DRV_FIFO_CON;
+    uint32_t RESERVED1[(0x300U - 0x220U) / 4U];
+    __IO uint32_t DRV_SEND_FIFO, DRV_RECV_FIFO;
 } I2C_TypeDef;
 #define I2C0 ((I2C_TypeDef *)0x05002000UL)
 #define I2C1 ((I2C_TypeDef *)0x05002400UL)
 #define TWI0 I2C0
 #define TWI1 I2C1
+
+typedef struct
+{
+    __IO uint32_t EN, PAUSE, DESC, CFG, SRC, DST, LEFT, PARA;
+    uint32_t RESERVED0[2];
+    __IO uint32_t MODE, FORMER_DESC, PACKAGES;
+    uint32_t RESERVED1[3];
+} DMA_Channel_TypeDef;
+typedef struct
+{
+    __IO uint32_t IRQ_EN[2];
+    uint32_t RESERVED0[2];
+    __IO uint32_t IRQ_PEND[2];
+    uint32_t RESERVED1[2];
+    __IO uint32_t SEC;
+    uint32_t RESERVED2;
+    __IO uint32_t AUTO_GATE;
+    uint32_t RESERVED3;
+    __IO uint32_t STATUS;
+    uint32_t RESERVED4[(0x100U - 0x34U) / 4U];
+    DMA_Channel_TypeDef CHANNEL[10];
+} DMA_TypeDef;
+#define DMA ((DMA_TypeDef *)0x03002000UL)
 
 typedef struct
 {
@@ -152,6 +180,7 @@ typedef struct
 /* Absolute GIC interrupt IDs, including the 32 SGI/PPI IDs. Manual 3.8.1. */
 typedef enum
 {
+    DMA_IRQn = 66,
     GPIOB_IRQn = 75,
     GPIOE_IRQn = 76,
     GPIOG_IRQn = 78,
@@ -182,6 +211,9 @@ _Static_assert(offsetof(TIMER_TypeDef, CHANNEL[1]) == 0x20, "TIM1 offset");
 _Static_assert(offsetof(SPI_TypeDef, TXD) == 0x200, "SPI TXD offset");
 _Static_assert(offsetof(SPI_TypeDef, RXD) == 0x300, "SPI RXD offset");
 _Static_assert(offsetof(I2C_TypeDef, DRV_CTRL) == 0x200, "TWI driver offset");
+_Static_assert(offsetof(I2C_TypeDef, DRV_RECV_FIFO) == 0x304, "TWI RX FIFO offset");
+_Static_assert(offsetof(DMA_TypeDef, CHANNEL) == 0x100, "DMA channel offset");
+_Static_assert(sizeof(DMA_Channel_TypeDef) == 0x40, "DMA channel stride");
 _Static_assert(offsetof(I2S_TypeDef, RXCHSEL) == 0x64, "I2S RX select offset");
 _Static_assert(offsetof(I2S_TypeDef, RXCHMAP[3]) == 0x74, "I2S RX mapping offset");
 _Static_assert(offsetof(LEDC_TypeDef, INT_STS) == 0x20, "LEDC status offset");

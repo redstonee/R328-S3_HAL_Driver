@@ -5,6 +5,7 @@
 | [probe](probe/main.c) | 只探测地址 0x50，报告状态和错误码 |
 | [scan](scan/main.c) | 扫描非保留地址 0x08–0x77，按 s 再次扫描 |
 | [memory](memory/main.c) | 按 r 读取指定寄存器范围并转储数据 |
+| [bmp280](bmp280/README.md) | PB8/PB9、地址 0x76，轮询 / IRQ / DMA 温度与气压测试 |
 
 默认 TWI1 PB8 SCL / PB9 SDA、AF4、100 kHz。外部上拉应按负载和速率配置；UART0 选择 PB8/PB9 路由时不能同时使用此 TWI1 配置。
 

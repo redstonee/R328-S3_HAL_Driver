@@ -50,7 +50,7 @@ FIFO 错误或超时通过 CCU 复位终止交换，句柄回到 RESET。重新�
 
 ## I²C / TWI
 
-支持 TWI0/1 的传统 TWI engine、7 位主机、最高 400 kHz。`I2C0/1` 与 `TWI0/1` 是实例别名。速率由 APB2 按 `APB2 / (10 × 2^N × (M+1))` 分频，实际值记录在 `ActualClockSpeed`。
+支持 TWI0/1 的轮询、中断和 DMA，7 位主机、最高 400 kHz。轮询 / IRQ 使用传统 TWI engine，DMA 使用独立 packet engine 的 32 字节 FIFO。`I2C0/1` 与 `TWI0/1` 是实例别名。速率由 APB2 按 `APB2 / (10 × 2^N × (M+1))` 分频，实际值记录在 `ActualClockSpeed`。
 
 地址遵循 STM32 HAL 约定：**7 位地址左移一位**，读写位由驱动设置。例如地址 `0x50` 传入 `0x50U << 1`。
 
@@ -66,6 +66,38 @@ HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
 TWI 复用功能自身控制开漏，`GPIO_MODE_AF_PP` 在此仅表示选择复用。MSP 的内部弱上拉不能替代按速率与负载设计的外部上拉。
 
 `ErrorCode` 区分 NACK、仲裁丢失、总线错误和超时。NACK 后发送 STOP；仲裁丢失时不发送 STOP。总线错误或超时后复位控制器，需重新初始化；驱动不提供 GPIO 九脉冲总线解锁。
+
+### 中断与 DMA
+
+`Master_Transmit/Receive`、`Mem_Write/Read` 均有 `_IT` / `_DMA` 版本，无 timeout 参数，启动成功立即返回 `HAL_OK`，完成后句柄回到 READY。启动失败直接返回错误，不触发回调；正在传输时其他调用返回 `HAL_BUSY`。所有传输 API 从前台调用，不要在其他 IRQ 中交叉使用同一句柄。
+
+`_IT` 自动注册 TWI GIC 中断，逐字节推进 START、地址、寄存器、repeated START 和末字节 NACK。`_DMA` 自动注册 TWI 中断，并使用已初始化且连接到 `hdmatx/hdmarx` 的 DMA 句柄；TWI0/1 的 DMA 请求号为 45/46。寄存器前缀最多 2 字节由 CPU 预填，载荷由系统 DMA 搬运。DMA 单次载荷范围 1–65535 字节，不支持零长度探测；设备探测继续使用 `HAL_I2C_IsDeviceReady()`。
+
+例如初始化两个静态 DMA 句柄后连接 I²C：
+
+```c
+static DMA_HandleTypeDef tx = {.Init = {0U, DMA_MEMORY_TO_PERIPH, DMA_REQUEST_TWI1}};
+static DMA_HandleTypeDef rx = {.Init = {1U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_TWI1}};
+/* Check each initialization result before starting a transfer. */
+HAL_DMA_Init(&tx);
+HAL_DMA_Init(&rx);
+hi2c1.hdmatx = &tx;
+hi2c1.hdmarx = &rx;
+static uint8_t sample[6];
+HAL_I2C_Mem_Read_DMA(&hi2c1, 0x76U << 1, 0xF7U, 1U, sample, sizeof(sample));
+/* Foreground loop: */
+HAL_I2C_Process(&hi2c1);
+```
+
+必须在前台循环定期调用 `HAL_I2C_Process()`，处理 STOP 完成和期限；时基没有周期中断，不能只启动后永久 WFI。默认异步超时为 100 ms，READY 时可用 `HAL_I2C_SetAsyncTimeout()` 修改，`HAL_MAX_DELAY` 取消期限。Process 不代替 IRQ，不搬运字节；TWI 总线完成与 DMA 队列完成都到达后才报告成功，避免 TX 数据刚进 FIFO 就释放应用缓冲区。
+
+回调为 `HAL_I2C_MasterTxCpltCallback` / `MasterRxCpltCallback` / `MemTxCpltCallback` / `MemRxCpltCallback` 和 `HAL_I2C_ErrorCallback`。I²C 回调均在 Process 或显式 Abort 的调用上下文执行，回调前已解锁。`HAL_I2C_Abort()` 终止异步传输，以 `HAL_I2C_ERROR_ABORT` 报告并使句柄 RESET，重新 Init 后重试；DMA 模式下的总线错误（含 NACK）也复位控制器。
+
+DMA 底层支持 10 通道、8 位宽度、单次非循环传输；共享 DMA IRQ 自动分发，不复位其他通道。已占用通道拒绝第二个句柄。所有句柄和缓冲区从启动到最终回调必须持续有效；传输期间不要修改缓冲区、DMA 配置或复用对应通道。DMA 只接受 SRAM `0x20000..0x3FFFF` 或 128 MiB DDR 窗口中的完整数据缓冲区，使用物理地址，要求维持当前启动代码关闭 MMU / D-cache 的条件；自行开启缓存时须先增加缓存维护。
+
+DMA 中止会等待通道停止；极端硬件故障下中止超时，句柄保持 BUSY，不提前释放缓冲区，后续 Process 会继续尝试清理。新增 `HAL_I2C_ERROR_DMA`（16）和 `HAL_I2C_ERROR_ABORT`（32）用于诊断。BMP280 的接线、三种模式切换和复制步骤见 [BMP280 例程](../example/i2c/bmp280/README.md)。
+
+DMA 通道使用源/目的握手模式（MODE bits 2/3），等待外设刷新 FIFO 请求后再传下一个字节；固定等待周期不能保证请求已经撤销，可能读空 FIFO。该设置也见 [全志 DMA 驱动](https://github.com/Allwinner-Homlet/H6-BSP4.9-linux/blob/master/drivers/dma/sunxi-dma.c#L521)。I²C DMA 接收在总线与 DMA 均完成后还检查 RX FIFO 必须为空，残留数据按 DMA 错误处理。
 
 ## I²S / IIS
 

@@ -35,14 +35,15 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 | RCC | APB2、UART/SPI/TWI/I²S/LEDC 时钟与复位、音频 PLL |
 | UART | UART0–3 轮询收发、7/8 数据位、校验、超时与错误状态 |
 | SPI | SPI0/1 主机、模式 0–3、8 位轮询、软件或控制器片选 |
-| I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、寄存器读写、重复 START |
+| I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、轮询 / IRQ / DMA、寄存器读写与重复 START |
+| DMA | 10 通道、字节宽度单次外设传输、描述符与完成中断；已接入 I²C |
 | I²S / IIS | I2S0/1/2、立体声、16/24/32 位、主从模式、有限块轮询收发 |
 | LEDC | 硬件 WS2812 时序、1–1024 灯整帧轮询发送、GRB 格式、超时与错误恢复 |
 | TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |
 | 时基 | 64 位 ARM 架构计数器 CNTPCT，毫秒 tick 和延时，无周期 IRQ |
-| 例程 | 按模块细分的 21 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描、I²S 波形和 WS2812 灯效 |
+| 例程 | 按模块细分的 22 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描 / BMP280、I²S 波形和 WS2812 灯效 |
 
-SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。DMA、UART 中断收发、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
+SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。其他外设的 DMA 接入、UART 中断收发、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
 
 ## 构建配置
 
