@@ -41,7 +41,7 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 | LEDC | 硬件 WS2812 时序、1–1024 灯整帧轮询发送、GRB 格式、超时与错误恢复 |
 | TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |
 | 时基 | 64 位 ARM 架构计数器 CNTPCT，毫秒 tick 和延时，无周期 IRQ |
-| 例程 | 按模块细分的 22 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI 环回、显示触摸、I²C 扫描 / BMP280、I²S 波形和 WS2812 灯效 |
+| 例程 | 按模块细分的 26 个场景，含 SRAM / DRAM 测试、GPIO 中断、SPI / I²C 通用中断与 DMA、显示触摸、BMP280、I²S 波形和 WS2812 灯效 |
 
 SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初始化 DDR 后复制并直接执行裸机应用；NOR 读取器从源码构建，不依赖完整系统镜像或 U-Boot。其他外设的 DMA 接入、UART 中断收发、PWM、USB 驱动、独立 DDR 训练驱动、SMP 和 MMU/cache 管理尚未实现。HAL 接口按 R328 的硬件能力设计，不保证与 STM32 HAL 源码直接兼容。
 
@@ -112,7 +112,7 @@ Drivers/R328_HAL_Driver/    HAL 公共接口和实现
 prebuilt/r328/             必要的 32 KiB boot0 二进制与 NAND / NOR 配置
 example/                   各外设独立例程及显示、触摸测试
 boot/nor/                  从源码构建的 SPI NOR 启动读取器
-cmake/                     GNU Arm 工具链
+cmake/                     CMake的GNU Arm 工具链配置文件
 linker/                    RAM 链接脚本模板
 tests/                     主机模型测试和 ARM 产物检查
 tools/                     FEL / NAND / NOR 打包、校验、下载和 Flash 烧写脚本

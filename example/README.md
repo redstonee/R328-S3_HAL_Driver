@@ -15,12 +15,16 @@
 | 时基 | [timeout](timebase/timeout/main.c) | 250 ms / 1 s 非阻塞任务与超时差值 |
 | [SPI](spi/README.md) | [clocks](spi/clocks/main.c) | 保持片选无效，发送测试时钟与数据 |
 | SPI | [loopback](spi/loopback/main.c) | 外部 MOSI/MISO 环回，校验跨 FIFO 的 131 字节 |
+| SPI | [interrupt](spi/interrupt/main.c) | `_IT` 单向收发、全双工环回、回调与中止 |
+| SPI | [dma](spi/dma/main.c) | `_DMA` 单向收发、全双工环回与 DMA 句柄连接 |
 | SPI | [ili9341_xpt2046](spi/ili9341_xpt2046/README.md) | ILI9341 色条与 XPT2046 触摸轨迹，轮询 / IRQ / DMA |
 | [I²C](i2c/README.md) | [probe](i2c/probe/main.c) | 探测地址 0x50，报告 NACK / 错误码 |
 | I²C | [scan](i2c/scan/main.c) | 扫描 0x08–0x77，支持重新扫描 |
 | I²C | [memory](i2c/memory/main.c) | 可配置设备与寄存器地址，重复 START 读取 |
-| [I²S](i2s/README.md) | [silence](i2s/silence/main.c) | 48 kHz 有限静音块 |
+| I²C | [interrupt](i2c/interrupt/main.c) | `_IT` 主机收发、寄存器读写、回调与中止 |
+| I²C | [dma](i2c/dma/main.c) | `_DMA` 主机收发、寄存器读写与 DMA 句柄连接 |
 | I²C | [bmp280](i2c/bmp280/README.md) | 0x76 BMP280，轮询 / IRQ / DMA 温度气压对比 |
+| [I²S](i2s/README.md) | [silence](i2s/silence/main.c) | 48 kHz 有限静音块 |
 | I²S | [tone](i2s/tone/main.c) | 200 ms PCM16 正弦波、左右声道单独测试 |
 | [LEDC](ledc/README.md) | [ws2812](ledc/ws2812/main.c) | 4 颗 WS2812，颜色、流水与呼吸灯效 |
 | [SRAM](sram/README.md) | [memory](sram/memory/main.c) | 完整 SRAM 配置下的空闲区写入 / 回读 |
@@ -51,6 +55,7 @@ cmake --build build/fel-debug --target fel-run
 | --- | --- | --- |
 | GPIO 的三个例程 | 无 | `gpio/gpio_example.h` |
 | I²C memory | 无 | `i2c/memory/config.h` |
+| I²C interrupt / dma | 无 | `i2c/i2c_async_config.h` |
 | I²C BMP280 | `i2c/bmp280/bmp280.c` | `i2c/bmp280/bmp280.h` |
 | SPI 显示 / 触摸 | `spi/ili9341_xpt2046/ili9341.c`、`spi/ili9341_xpt2046/xpt2046.c`、`spi/ili9341_xpt2046/display_bus.c` | `spi/ili9341_xpt2046/ili9341.h`、`spi/ili9341_xpt2046/xpt2046.h`、`spi/ili9341_xpt2046/display_bus.h` |
 | 其余例程 | 无 | 无 |
@@ -72,8 +77,8 @@ xfel 不在 PATH 时，配置阶段增加 `-DR328_XFEL=/absolute/path/to/xfel`�
 
 ## 配置与验证
 
-外设默认引脚见 [接口说明](../docs/peripherals.md)。复制后在 `Core/Inc/gpio_example.h` 中修改 GPIO 引脚，在 `Core/Inc/config.h` 中修改 I²C 读取参数，在 `Core/Inc/ili9341.h`、`Core/Inc/xpt2046.h` 中修改显示控制脚与触摸参数；需要调整面板初始化序列时修改 `Core/Src/ili9341.c`。
+外设默认引脚见 [接口说明](../docs/peripherals.md)。复制后在 `Core/Inc/gpio_example.h` 中修改 GPIO 引脚，在 `Core/Inc/config.h` 中修改 I²C 轮询读取参数，在 `Core/Inc/i2c_async_config.h` 中修改 I²C 中断 / DMA 例程参数，在 `Core/Inc/ili9341.h`、`Core/Inc/xpt2046.h` 中修改显示控制脚与触摸参数；需要调整面板初始化序列时修改 `Core/Src/ili9341.c`。
 
-SPI 显示/触摸和 I²C BMP280 例程支持轮询、中断、DMA 切换，异步完成与超时在前台 Process 中处理。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
+SPI / I²C 的 `interrupt`、`dma` 为独立通用例程；SPI 显示/触摸和 I²C BMP280 例程支持轮询、中断、DMA 切换。异步完成与超时在前台 Process 中处理，DMA 例程各自占用通道 0 / 1，合并到一个应用时需分配不同通道。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
 
 主机测试验证寄存器、IRQ 分发与协议逻辑；交叉构建检查镜像入口和内存布局。实际信号、显示效果与触摸校准需在目标硬件上验证。
