@@ -136,6 +136,8 @@ target_compile_options(
               -marm
               -mfloat-abi=soft
               -mno-unaligned-access
+              --specs=nosys.specs
+              --specs=nano.specs
               -ffreestanding
               -fno-builtin
               -ffunction-sections
@@ -184,13 +186,17 @@ set_target_properties(
 if(R328_NAND_IMAGE OR R328_NOR_IMAGE)
     target_sources(firmware PRIVATE Core/Startup/flash_header.S)
 endif()
-target_link_libraries(firmware PRIVATE r328_hal gcc)
+# newlib-nano supplies memory/string routines suitable for MMU-off operation.
+# Group libc and libgcc to resolve their mutual references without a hosted CRT.
+target_link_libraries(firmware PRIVATE r328_hal -Wl,--start-group c gcc -Wl,--end-group)
 target_link_options(
     firmware
     PRIVATE
     -mcpu=cortex-a7
     -marm
     -mfloat-abi=soft
+    --specs=nosys.specs
+    --specs=nano.specs
     -nostdlib
     -T${CMAKE_CURRENT_BINARY_DIR}/r328_ram.ld
     -Wl,--gc-sections,--build-id=none,--fatal-warnings,-z,noexecstack

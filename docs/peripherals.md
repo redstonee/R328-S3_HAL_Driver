@@ -60,15 +60,19 @@ IT / DMA 的期限仍由各句柄的 `HAL_xxx_SetAsyncTimeout()` 控制，轮询
 
 UART0–3 支持轮询、`_IT` 和 `_DMA` 定长收发，发送与接收可以同时运行，也可在两个方向混用模式。同一方向忙时返回 `HAL_BUSY`；`Init/DeInit` 和修改异步超时要求两个方向均空闲。初始化不会选择任何全局 console，引脚由应用配置。
 
-异步入口为 `HAL_UART_Transmit_IT/Receive_IT/Transmit_DMA/Receive_DMA`。启动后在前台持续调用 `HAL_UART_Process()`，由 `TxCpltCallback/RxCpltCallback/ErrorCallback` 通知结果，回调前已解锁；UART 和 DMA 的 GIC 中断由 HAL 自动注册。TX 完成必须同时满足数据搬运结束与 FIFO / 移位寄存器清空，DMA 完成中断本身不代表最后一个停止位已发送。
+异步入口为 `HAL_UART_Transmit_IT/Receive_IT/Transmit_DMA/Receive_DMA`。UART 和 DMA 的 GIC 中断由 HAL 自动注册，正常收发完成与错误处理不需要调用 `HAL_UART_Process()`。`TxCpltCallback/RxCpltCallback/ErrorCallback` 通知结果，回调前已解锁，通常在 UART / DMA 中断中执行，可以重新启动传输；回调应简短、非阻塞，将打印和数据处理留给主循环。主动 Abort、可选 Process 或另一方向轮询的收尾也可能在调用者上下文触发回调。
 
-`HAL_UART_SetAsyncTimeout()` 配置每个方向从启动开始计算的毫秒期限，默认 100 ms；只能在空闲时修改，`HAL_MAX_DELAY` 表示不限时。UART 字符超时中断只帮助排空 RX FIFO，不提前结束定长接收；未实现 Receive-to-IDLE 或循环 DMA。
+异步 TX 完成表示全部数据已搬入 FIFO，且 FIFO 已空，句柄可以接受下一次发送，原缓冲区可以复用。最后一个字符仍可能在移位寄存器中发送。DMA 搬运完成后转由 UART FIFO 空中断确认，不能仅凭 DMA 完成就判定 FIFO 空。需要切换波特率、引脚、RS485 方向或关闭 UART 时，先在前台调用 `HAL_UART_FlushTx()` 等待 FIFO 和移位寄存器均空；它使用模块轮询期限，TX 仍忙时返回 `HAL_BUSY`。阻塞 `HAL_UART_Transmit()` 仍等待线路发送完毕。
+
+`HAL_UART_Process()` 仅用于可选的软件超时检查与 DMA 停止失败后的重试，不占用定时器中断。不调用它时不执行软件超时，正常 IT / DMA 收发仍会完成。需要有限期限时在前台定期调用 Process，并用 `HAL_UART_SetAsyncTimeout()` 配置每个方向从启动开始计算的毫秒期限，默认 100 ms；只能在空闲时修改，`HAL_MAX_DELAY` 表示不限时。UART 字符超时中断只帮助排空 RX FIFO，不提前结束定长接收；未实现 Receive-to-IDLE 或循环 DMA。
+
+异步 RX 的 LSR 检查由 UART 接收中断负责：有 FIFO 数据时检查对应字节，线路状态中断则读取并保存错误。异步 TX 通过无副作用的 USR.TFE 判断 FIFO 空，不读取 LSR；DMA RX 完成中断额外读取一次 LSR，保存尚未处理的线路错误。等待 RX 时不反复读取 LSR。`RxErrorLineStatus` / `RxErrorFifoLevel` 保存首次硬件接收错误时的原始 LSR 和 FIFO 字节数，失败清理 FIFO 后仍保留，直到下一次接收或 Init。
 
 DMA 使用 8 位单次传输，UART0–3 的请求号为 `DMA_REQUEST_UART0..3`（14–17）；收发同时工作时必须分配两个不同的 DMA 通道。先 `HAL_DMA_Init()`，再连接 UART 的 `hdmatx/hdmarx`。DMA 描述符和数据须位于物理 SRAM 或 DDR，保持现有 MMU / D-cache 关闭的启动条件。单次 DMA 长度上限为 `0x1FFFFFF` 字节。
 
 句柄、DMA 句柄和缓冲区必须持续有效，直到对应完成 / 错误回调，或中止成功。`HAL_UART_AbortTransmit/AbortReceive` 只停止指定方向，`HAL_UART_Abort` 停止两个方向；中止通过 `ErrorCallback` 报告 `HAL_UART_ERROR_ABORT`。若 DMA 尚未停止，中止返回 `HAL_TIMEOUT` 并保留方向的 BUSY 状态，此时继续调用 Process，不能重用缓冲区。两个方向同时出错时，错误回调也须结合 `State` 检查仍处于 BUSY 的方向，不能释放其缓冲区。失败或中止会清理该方向 FIFO；TX 移位寄存器中已经开始的字符仍可能发送完。成功 RX 保留 FIFO 中下一包的数据。
 
-状态通过 `State` 区分 READY / BUSY_TX / BUSY_RX / BUSY_TX_RX，`Tx.Count/Rx.Count` 表示尚未搬运的字节数；TX Count 为零时仍可能正在发送。`ErrorCode` 汇总两个方向的错误，也可查看 `Tx.ErrorCode/Rx.ErrorCode`。所有启动、Process 和中止接口仅从 CPU0 前台调用，不在其他 IRQ 中重入。
+状态通过 `State` 区分 READY / BUSY_TX / BUSY_RX / BUSY_TX_RX，`Tx.Count/Rx.Count` 表示尚未搬运的字节数；TX Count 为零时仍可能正在发送。`ErrorCode` 汇总两个方向的错误，也可查看 `Tx.ErrorCode/Rx.ErrorCode`。Process 和阻塞接口从 CPU0 前台调用；异步启动可从前台或本句柄的完成回调调用，不在无关 IRQ 中交叉操作。
 
 复制和交互步骤见 [UART 例程](../example/uart/README.md)。
 

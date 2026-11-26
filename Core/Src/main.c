@@ -1,4 +1,5 @@
 #include "main.h"
+#include "stdio.h"
 
 volatile uint32_t g_application_error;
 
@@ -35,11 +36,11 @@ int main(void)
     UART_HandleTypeDef huart0 = {.Instance = UART0, .Init = uart_init};
     HAL_UART_Init(&huart0);
 
+    uint8_t buffer[64];
     for (;;)
     {
-        HAL_UART_PrintString(&huart0, "Fuck The World! ");
-        HAL_UART_PrintU32(&huart0, HAL_GetTick());
-        HAL_UART_PrintString(&huart0, "\r\n");
+        uint32_t len = snprintf((char*)buffer, sizeof(buffer), "Fuck The World! Tick=%lu\r\n", HAL_GetTick());
+        HAL_UART_Transmit_IT(&huart0, buffer, len);
 
         HAL_GPIO_TogglePin(LED1_PORT, LED1_PIN);
         HAL_Delay(500);

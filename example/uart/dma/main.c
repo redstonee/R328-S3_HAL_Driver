@@ -64,7 +64,8 @@ static void app_init(const char *banner)
     (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
-/* HAL callbacks run in foreground Process/Abort, after the handle unlocks. */
+/* Normal callbacks run in UART/DMA IRQ context, after unlocking.
+ * Only record flags/snapshots here; print and process data in the main loop. */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *handle)
 {
     if (handle == &huart0)
@@ -99,15 +100,11 @@ int main(void)
     (void)HAL_UART_PrintString(
         &huart0, "Send exactly 8 bytes (e.g. 12345678), then wait for the raw echo.\r\n"
                  "No newline/idle detection; disable terminal local echo.\r\n");
-    /* Interactive RX can take arbitrarily long; use application deadlines when
-     * needed. The HAL default deadline would otherwise expire after 100 ms. */
-    require_ok("UART timeout=", HAL_UART_SetAsyncTimeout(&huart0, HAL_MAX_DELAY));
     require_ok("RX start=", HAL_UART_Receive_DMA(&huart0, rx_blocks[0], UART_BLOCK_BYTES));
     static const uint8_t ready[] = "\r\nReady.\r\n";
     require_ok("TX start=", HAL_UART_Transmit_DMA(&huart0, ready, sizeof(ready) - 1U));
     for (;;)
     {
-        HAL_UART_Process(&huart0);
         if (uart_error != HAL_UART_ERROR_NONE)
         {
             uint32_t saved_error = uart_error;
@@ -131,7 +128,7 @@ int main(void)
                        HAL_UART_Receive_DMA(&huart0, rx_blocks[receive_index], UART_BLOCK_BYTES));
             require_ok("TX start=", HAL_UART_Transmit_DMA(&huart0, completed, UART_BLOCK_BYTES));
         }
-        /* Keep servicing Process: the architecture counter does not wake WFI,
-         * and TEMT has no dedicated transfer-complete interrupt. */
+        /* No Process call is needed. Leave this loop running to avoid a
+         * check-then-WFI race with the completion flags. */
     }
 }

@@ -33,7 +33,7 @@ typedef struct
     uint32_t Parity;
 } UART_InitTypeDef;
 /* Driver-owned progress for each independent direction. Count is the number of
- * bytes not yet copied to/from the FIFO (DMA count is refreshed by Process). */
+ * bytes not yet copied to/from the FIFO (DMA count is refreshed on IRQ/Process). */
 typedef struct
 {
     uint32_t Size, Start;
@@ -46,6 +46,9 @@ typedef struct
     volatile HAL_LockTypeDef Lock;
     volatile HAL_UART_StateTypeDef State;
     volatile uint32_t ErrorCode;
+    /* First hardware RX line-error snapshot, preserved after FIFO cleanup.
+     * Reading live LSR again would clear flags and lose the original status. */
+    volatile uint32_t RxErrorLineStatus, RxErrorFifoLevel;
     DMA_HandleTypeDef *hdmatx, *hdmarx;
     const uint8_t *pTxBuffPtr;
     uint8_t *pRxBuffPtr;
@@ -65,23 +68,34 @@ HAL_StatusTypeDef HAL_UART_DeInit(UART_HandleTypeDef *handle);
 uint32_t HAL_UART_GetRxFifoLevel(const UART_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *data, uint32_t size);
 HAL_StatusTypeDef HAL_UART_Receive(UART_HandleTypeDef *handle, uint8_t *data, uint32_t size);
+/* Wait for both FIFO and shift register to empty, using the polling timeout.
+ * Call after async TX completion before changing baud/pins or disabling UART.
+ * Returns HAL_BUSY if a TX transfer still owns the handle. */
+HAL_StatusTypeDef HAL_UART_FlushTx(UART_HandleTypeDef *handle);
 /* Fixed-size asynchronous transfers. TX and RX may run concurrently, using
  * different DMA channels. Buffers/linked DMA handles must remain valid until
- * completion or a successful abort. Call Process regularly in foreground;
- * callbacks run there (or in Abort), never in the UART/DMA IRQ handlers.
- * TX completes only after FIFO AND shift register empty. No idle/circular RX. */
+ * completion or a successful abort. UART/DMA IRQs complete transfers without
+ * Process; callbacks run after unlocking, normally in IRQ context. Keep them
+ * short and nonblocking. Abort/Process and opposite-direction polling cleanup
+ * may also invoke callbacks in the caller's context; rearming is supported.
+ * TX completion means all bytes copied AND FIFO empty; the final character
+ * may still be shifting out. FlushTx waits for wire completion if needed.
+ * No idle/circular RX. */
 HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *handle, const uint8_t *data,
                                        uint32_t size);
 HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *handle, uint8_t *data, uint32_t size);
 HAL_StatusTypeDef HAL_UART_Transmit_DMA(UART_HandleTypeDef *handle, const uint8_t *data,
                                         uint32_t size);
 HAL_StatusTypeDef HAL_UART_Receive_DMA(UART_HandleTypeDef *handle, uint8_t *data, uint32_t size);
-/* Default 100 ms after Init, HAL_MAX_DELAY disables the deadline. Change only
+/* Optional Process-based deadline, default 100 ms after Init. Without Process
+ * no software timeout is enforced. HAL_MAX_DELAY disables it. Change only
  * while both directions are idle; each direction has its own start time. */
 HAL_StatusTypeDef HAL_UART_SetAsyncTimeout(UART_HandleTypeDef *handle, uint32_t timeout);
 HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_UART_AbortTransmit(UART_HandleTypeDef *handle);
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *handle);
+/* Optional foreground timeout check / retry of a DMA stop that timed out.
+ * Not required for normal IT/DMA completion. No timer IRQ is reserved. */
 void HAL_UART_Process(UART_HandleTypeDef *handle);
 void HAL_UART_IRQHandler(UART_HandleTypeDef *handle);
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *handle);

@@ -2,11 +2,11 @@
 
 面向 Allwinner R328-S3（双核 ARM Cortex-A7）的 C11 + CMake 裸机工程，采用接近 STM32 HAL 的 `Handle / Init / MspInit / Callback` 接口。
 支持DRAM、SRAM运行，支持 SPI NAND / SPI NOR 刷写和冷启动，提供 GPIO、UART、SPI、I²C / TWI、I²S / IIS、LEDC、Timer / GIC、时基等外设的轮询 / 中断 / DMA 接口。
-当前仅使用 CPU0，不依赖操作系统、newlib 或动态内存。
+当前仅使用 CPU0，链接工具链提供的 newlib-nano C 标准库，不依赖操作系统。
 
 ## 快速开始
 
-需要 CMake ≥ 3.21、Ninja、GNU Arm Embedded 工具链（`arm-none-eabi-gcc`、binutils、libgcc）和 Python 3。通过 USB FEL 下载时另需 [xfel](https://github.com/xboot/xfel)。
+需要 CMake ≥ 3.21、Ninja、GNU Arm Embedded 工具链（`arm-none-eabi-gcc`、binutils、libgcc、newlib-nano）和 Python 3。通过 USB FEL 下载时另需 [xfel](https://github.com/xboot/xfel)。
 
 ```sh
 cmake --preset fel-debug
@@ -25,6 +25,10 @@ cmake --build build/fel-debug --target fel-run
 xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。
 
 框架启动不预留 UART 或外设引脚。`Core/Src/main.c` 是应用入口，HAL、时基和时钟初始化之后的外设配置由应用决定。应用自行定义句柄、配置 GPIO 并调用对应 HAL 初始化；需要输出时，显式传入 UART 句柄调用 `HAL_UART_PrintString()`、`HAL_UART_PrintU32()`、`HAL_UART_PrintHex()` 等接口。
+
+内存和字符串操作直接包含 `<string.h>`，使用标准库的 `memcpy()`、`memset()`、`memmove()`、`memcmp()`、`strlen()`、`strcmp()` 等函数。构建使用 `--specs=nano.specs`，按需链接 newlib-nano 和 libgcc；其精简内存实现适合当前 MMU 关闭的配置，避免默认优化版 `memcpy()` 的非对齐访问要求。启动、栈和 BSS 初始化仍由工程的启动代码负责。
+
+`Core/Src/sysmem.c` 提供 `_sbrk()`，支持标准库的 `malloc/calloc/realloc/free` 和 `snprintf()`。堆范围为 `__heap_start__`（静态数据之后，8 字节对齐）到 `__heap_end__`（所有异常模式预留栈之下），随 SRAM / DDR 链接配置自动变化；超出范围返回失败并设置 `errno=ENOMEM`。动态分配只在 CPU0 前台使用，不在 IRQ 中调用。SRAM / DRAM 破坏性内存测试会覆盖这段空闲空间，测试期间不可使用动态分配。文件和终端系统调用仍由应用接入，UART 不会自动成为 `printf()` 的标准输出。
 
 `fel-run` 校验芯片 ID，将程序暂存于 `0x28000`，回读比较后通过 scratchpad 引导搬到 `0x20000` 执行，运行时使用完整 128 KiB SRAM；普通构建和 CTest 不访问 USB。详见 [FEL 下载说明](docs/fel-sram.md)。
 

@@ -47,10 +47,16 @@ SRAM 运行可改用 `fel-debug`。串口为 PH0 TX / PH1 RX，115200 8N1。关�
 
 RX 使用两个静态缓冲区轮换：本块接收完成、上一块 TX 完成后，在另一个缓冲区重新接收，同时发送本块内容。只在对应完成回调后复用缓冲区。此例用于交互验证，不保证无流控连续流输入时不会溢出。
 
-四个入口是 `HAL_UART_Transmit_IT/Receive_IT/Transmit_DMA/Receive_DMA`。IT 与 DMA 均由实际中断 / DMA 搬运数据；主循环持续调用 `HAL_UART_Process()` 处理最终完成和超时。`TxCpltCallback/RxCpltCallback/ErrorCallback` 在 Process 或 Abort 的前台上下文执行，已经解锁，可在回调中重新启动传输。最后一个字节的停止位发送完后才报告 TX 完成。
+IT 例程遇到错误会打印首个错误的 LSR、FIFO 字节数、剩余接收长度、PH1 电平和 UART 配置，再停止。`ErrorCode=24`（`0x18`）是帧错误 FE 与 Break BI，表示接收器报告无效停止位和持续低电平，不是少于 8 字节或按键间隔过长。PH1 电平是在错误回调时采样，不能单凭该值判断整个字符的波形；排查时应结合原始 LSR、FIFO 快照及轮询例程的对照结果。
+
+四个入口是 `HAL_UART_Transmit_IT/Receive_IT/Transmit_DMA/Receive_DMA`。IT 与 DMA 均由实际中断 / DMA 搬运数据并完成传输，主循环无需调用 `HAL_UART_Process()`。`TxCpltCallback/RxCpltCallback/ErrorCallback` 通常在 UART / DMA 中断中执行，已经解锁，可在完成回调中重新启动传输；例程回调仅保存标志或错误快照，打印与数据处理放在主循环。Abort、可选 Process 或另一方向轮询收尾时也可能在调用者上下文回调。
+
+异步 TX 在全部数据搬入 FIFO 且 FIFO 空时完成，随后可以复用缓冲区并再次发送。最后一个字符可能尚未发完；更改串口配置、RS485 方向或关闭 UART 前，在前台调用 `HAL_UART_FlushTx()` 等待线路发送完毕，使用 UART 模块轮询期限。阻塞发送仍等待 FIFO 和移位寄存器均空。
 
 DMA 例程分别占用通道 0（TX）和 1（RX），请求号为 `DMA_REQUEST_UART0`。更换 UART 时同步修改实例、GPIO 复用和两个请求号。DMA 句柄 / 描述符和收发缓冲区须持续有效，位于物理 SRAM 或 DDR，沿用框架关闭 MMU / D-cache 的启动条件。两个方向使用不同缓冲区与 DMA 通道；不要与其他外设共享正在工作的通道。
 
-异步默认超时为 100 ms，通过 `HAL_UART_SetAsyncTimeout()` 在两个方向均空闲时修改。例程设为 `HAL_MAX_DELAY`，方便等待人工输入；应用可按协议配置有限期限。`HAL_UART_AbortTransmit/AbortReceive` 可分别停止一个方向，`HAL_UART_Abort` 停止两个方向，以 `ErrorCallback` 报告 `HAL_UART_ERROR_ABORT`。若 DMA 停止超时，缓冲区仍被占用，须继续 Process 或等待中止成功后再复用。错误回调也须结合 `State` 检查各方向是否已经停止。
+例程不调用 Process，正常收发不执行软件超时，可以一直等待人工输入。需要有限期限时，在前台定期调用 `HAL_UART_Process()`，并通过 `HAL_UART_SetAsyncTimeout()` 在两个方向均空闲时修改期限；默认 100 ms，`HAL_MAX_DELAY` 关闭超时。`HAL_UART_AbortTransmit/AbortReceive` 可分别停止一个方向，`HAL_UART_Abort` 停止两个方向，以 `ErrorCallback` 报告 `HAL_UART_ERROR_ABORT`。若 DMA 停止超时，缓冲区仍被占用，须继续 Process 或等待中止成功后再复用。错误回调也须结合 `State` 检查各方向是否已经停止。
 
-当前支持定长单次传输，尚无 Receive-to-IDLE 或循环 DMA。主机模型已检查 IT/DMA 混合全双工、短包 / FIFO 边界、回调顺序、LSR 错误、计数回绕和中止恢复；实板验证待完成。
+当前支持定长单次传输，尚无 Receive-to-IDLE 或循环 DMA。主机模型已检查不调用 Process 的 IT/DMA 混合全双工、短包 / FIFO 边界、FIFO 空但移位寄存器仍忙时再次发送、显式等待线路发送完毕、回调内重启收发、慢速键入与字符超时 IRQ、LSR 错误快照、计数回绕和中止恢复。
+
+此前的前台完成版本已通过 UART0 IT SRAM 实板验证：PH0/PH1、115200 8N1 下逐字输入 `12345678` 与 `abcdefgh`，两组均正常完整回显，无 FE/BI 错误。当前中断完成、FIFO 空释放 TX 的版本已通过主机模型测试，尚待实板验证；UART DMA 收发也尚待实板验证。

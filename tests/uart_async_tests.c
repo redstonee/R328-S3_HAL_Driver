@@ -20,9 +20,11 @@ static DMA_HandleTypeDef tx_dma = {.Init = {0U, DMA_MEMORY_TO_PERIPH, DMA_REQUES
 static DMA_HandleTypeDef rx_dma = {.Init = {1U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_UART0}};
 static uint8_t tx_fifo[FIFO_DEPTH], rx_fifo[FIFO_DEPTH], wire[4096];
 static uint32_t tx_in, tx_out, rx_in, rx_out, wire_size, shift_busy, line_errors, fifo_config;
-static uint32_t dma_pos[2], callbacks[3], tick;
-static int in_irq, callback_rearm, polling_clock;
+static uint32_t dma_pos[2], callbacks[3], irq_callbacks[3], tick;
+static uint32_t lsr_reads, rx_timeout;
+static int in_irq, callback_rearm, callback_tx_mode, polling_clock, polling_interrupts;
 static void hardware_step(void);
+static void interrupts(void);
 static uint8_t rearm_byte;
 
 uint32_t HAL_GetTick(void)
@@ -31,13 +33,22 @@ uint32_t HAL_GetTick(void)
 }
 static void callback(UART_HandleTypeDef *h, uint32_t kind)
 {
-    assert(h == &uart && h->Lock == HAL_UNLOCKED && !in_irq);
+    assert(h == &uart && h->Lock == HAL_UNLOCKED);
     ++callbacks[kind];
+    irq_callbacks[kind] += in_irq != 0;
 }
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *h)
 {
     assert(h->Tx.Mode == 0U && h->Tx.Count == 0U);
     callback(h, 0U);
+    if (callback_tx_mode != 0)
+    {
+        int mode = callback_tx_mode;
+        callback_tx_mode = 0;
+        assert(in_irq);
+        assert((mode == 1 ? HAL_UART_Transmit_IT(h, h->pTxBuffPtr, 1U)
+                          : HAL_UART_Transmit_DMA(h, h->pTxBuffPtr, 1U)) == HAL_OK);
+    }
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *h)
 {
@@ -67,6 +78,7 @@ static void put_tx(uint8_t value)
 static uint8_t get_rx(void)
 {
     assert(rx_in != rx_out);
+    rx_timeout = 0U;
     return rx_fifo[rx_out++ % FIFO_DEPTH];
 }
 static void put_rx(uint8_t value)
@@ -83,9 +95,14 @@ uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
     }
     if (reg == &u->LSR)
     {
+        ++lsr_reads;
         if (polling_clock)
         {
             hardware_step();
+            if (polling_interrupts && !in_irq)
+            {
+                interrupts();
+            }
         }
         uint32_t status = line_status();
         line_errors = 0U; /* LSR errors are clear on read, including TEMT polls. */
@@ -93,7 +110,8 @@ uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
     }
     if (reg == &u->USR)
     {
-        return (tx_in - tx_out < FIFO_DEPTH ? 2U : 0U) | (shift_busy ? 1U : 0U);
+        return (tx_in - tx_out < FIFO_DEPTH ? 2U : 0U) | (tx_in == tx_out ? 4U : 0U) |
+               (shift_busy ? 1U : 0U);
     }
     if (reg == &u->RFL)
     {
@@ -105,9 +123,14 @@ uint32_t R328_HAL_TestRead32(volatile uint32_t *reg)
         {
             return 6U;
         }
-        if (rx_in != rx_out && (u->IER_DLH & IER_RX))
+        static const uint32_t rx_triggers[] = {1U, 64U, 128U, 254U};
+        if (rx_in - rx_out >= rx_triggers[(fifo_config >> 6) & 3U] && (u->IER_DLH & IER_RX))
         {
             return 4U;
+        }
+        if (rx_timeout && rx_in != rx_out && (u->IER_DLH & IER_RX))
+        {
+            return 12U;
         }
         return tx_in == tx_out && (u->IER_DLH & IER_TX) ? 2U : 1U;
     }
@@ -123,11 +146,12 @@ void R328_HAL_TestWrite32(volatile uint32_t *reg, uint32_t value)
     }
     if (reg == &u->IIR_FCR)
     {
-        assert((value & ~0xFU) == 0U); /* Detect accidental IIR read/modify/write. */
+        assert((value & ~0xFFU) == 0U);
         if (value & 2U)
         {
             rx_in = rx_out = 0U;
             line_errors = 0U;
+            rx_timeout = 0U;
         }
         if (value & 4U)
         {
@@ -223,6 +247,12 @@ static void interrupts(void)
 }
 static void init(void)
 {
+    /* FIFO completion can precede the final wire bit. Let the model finish
+     * that character before testing the next reset/configuration. */
+    if (uart.Tx.Mode == 0U && shift_busy)
+    {
+        hardware_step();
+    }
     assert(HAL_UART_Init(&uart) == HAL_OK);
     assert(HAL_UART_SetAsyncTimeout(&uart, 100U) == HAL_OK);
     uart.hdmatx = &tx_dma;
@@ -235,7 +265,6 @@ static void pump(void)
     {
         hardware_step();
         interrupts();
-        HAL_UART_Process(&uart);
     }
     assert(uart.State == HAL_UART_STATE_READY);
 }
@@ -250,6 +279,7 @@ static void transfers(void)
             for (uint32_t n = 0U; n < sizeof(sizes) / sizeof(sizes[0]); ++n)
             {
                 uint32_t size = sizes[n], tx_before = callbacks[0], rx_before = callbacks[1];
+                uint32_t tx_irq_before = irq_callbacks[0], rx_irq_before = irq_callbacks[1];
                 init();
                 for (uint32_t i = 0U; i < size; ++i)
                 {
@@ -274,10 +304,11 @@ static void transfers(void)
                     put_rx((uint8_t)(i ^ 0x3CU));
                     hardware_step();
                     interrupts();
-                    HAL_UART_Process(&uart);
                 }
                 pump();
                 assert(callbacks[0] == tx_before + 1U && callbacks[1] == rx_before + 1U);
+                assert(irq_callbacks[0] == tx_irq_before + 1U &&
+                       irq_callbacks[1] == rx_irq_before + 1U);
                 assert(uart.ErrorCode == 0U && wire_size == size);
                 assert(memcmp(tx, wire, size) == 0);
                 for (uint32_t i = 0U; i < size; ++i)
@@ -297,7 +328,8 @@ static void completion_order(void)
     for (uint32_t mode = 0U; mode < 2U; ++mode)
     {
         init();
-        uint32_t before = callbacks[0];
+        tx[0] = 0x31U;
+        uint32_t before = callbacks[0], reads_before = lsr_reads;
         assert((mode == 0U ? HAL_UART_Transmit_IT(&uart, tx, 1U)
                            : HAL_UART_Transmit_DMA(&uart, tx, 1U)) == HAL_OK);
         interrupts();
@@ -306,34 +338,54 @@ static void completion_order(void)
             dma_step(0U);
             interrupts();
         }
-        HAL_UART_Process(&uart);
-        assert(callbacks[0] == before); /* TX FIFO still contains one byte. */
+        assert(callbacks[0] == before); /* FIFO contains one byte, DMA is done. */
+        assert((uart.Instance->IER_DLH & IER_TX) != 0U);
+        assert(HAL_UART_FlushTx(&uart) == HAL_BUSY);
         hardware_step();
-        HAL_UART_Process(&uart);
-        assert(callbacks[0] == before && uart.State == HAL_UART_STATE_BUSY_TX); /* Shift busy. */
-        hardware_step();
-        HAL_UART_Process(&uart);
-        assert(callbacks[0] == before + 1U);
+        assert(shift_busy && tx_in == tx_out);
+        interrupts();
+        assert(callbacks[0] == before + 1U && uart.State == HAL_UART_STATE_READY);
+        assert(lsr_reads == reads_before); /* Completion never samples LSR. */
+        /* A new transfer can fill FIFO while the previous character shifts. */
+        tx[0] = 0x32U;
+        assert((mode == 0U ? HAL_UART_Transmit_IT(&uart, tx, 1U)
+                           : HAL_UART_Transmit_DMA(&uart, tx, 1U)) == HAL_OK);
+        pump();
+        assert(callbacks[0] == before + 2U && shift_busy);
+        assert(wire_size == 2U && wire[0] == 0x31U && wire[1] == 0x32U);
+        /* Explicit wire drain remains available when changing UART/pins. */
+        HAL_UART_SetPollingTimeout(1U);
+        polling_clock = 1;
+        assert(HAL_UART_FlushTx(&uart) == HAL_OK);
+        polling_clock = 0;
+        assert(!shift_busy && callbacks[0] == before + 2U);
 
-        /* A queued next frame must survive completion and rearming. */
+        /* A queued next frame survives IRQ completion and callback rearming. */
         before = callbacks[1];
         assert((mode == 0U ? HAL_UART_Receive_IT(&uart, rx, 1U)
                            : HAL_UART_Receive_DMA(&uart, rx, 1U)) == HAL_OK);
         put_rx(0x81U);
         put_rx(0x92U);
         hardware_step();
-        interrupts();
-        if (mode != 0U)
-        {
-            /* No RX completion before the DMA IRQ, even though LEFT is zero. */
-            assert(callbacks[1] == before);
-        }
+        assert(callbacks[1] == before); /* DMA LEFT=0 still needs its IRQ. */
         callback_rearm = 1;
-        HAL_UART_Process(&uart);
+        interrupts();
         assert(rx[0] == 0x81U && callbacks[1] == before + 1U);
         interrupts();
-        HAL_UART_Process(&uart);
         assert(rearm_byte == 0x92U && callbacks[1] == before + 2U);
+    }
+    /* TX can also be rearmed directly from either IRQ callback. */
+    for (uint32_t mode = 0U; mode < 2U; ++mode)
+    {
+        init();
+        uint32_t before_tx = callbacks[0];
+        callback_tx_mode = (int)mode + 1;
+        assert(HAL_UART_SetAsyncTimeout(&uart, 1U) == HAL_OK);
+        assert((mode == 0U ? HAL_UART_Transmit_IT(&uart, tx, 1U)
+                           : HAL_UART_Transmit_DMA(&uart, tx, 1U)) == HAL_OK);
+        tick += 1000U; /* No Process: optional software timeout is not enforced. */
+        pump();
+        assert(callback_tx_mode == 0 && callbacks[0] == before_tx + 2U);
     }
     init();
     uint32_t before = callbacks[1];
@@ -343,10 +395,8 @@ static void completion_order(void)
     HAL_UART_Process(&uart);
     assert(callbacks[1] == before && uart.State == HAL_UART_STATE_BUSY_RX);
     interrupts();
-    HAL_UART_Process(&uart);
     assert(callbacks[1] == before + 1U);
-    /* A direction may be the only DMA user even if both link fields name the
-     * same handle. Match the active direction, not just the first pointer. */
+    /* A direction can be the only DMA user with both links naming its handle. */
     init();
     uart.hdmatx = uart.hdmarx;
     before = callbacks[1];
@@ -354,7 +404,6 @@ static void completion_order(void)
     put_rx(0x69U);
     hardware_step();
     interrupts();
-    HAL_UART_Process(&uart);
     assert(callbacks[1] == before + 1U && rx[0] == 0x69U);
     uart.hdmatx = &tx_dma;
 }
@@ -443,6 +492,56 @@ static void guards_and_errors(void)
     assert(HAL_UART_Transmit_IT(&other, tx, 1U) == HAL_BUSY);
     assert(HAL_UART_DeInit(&other) == HAL_BUSY);
 }
+static void slow_keyboard_input(void)
+{
+    uint8_t received[8] = {0};
+    init();
+    assert(HAL_UART_SetAsyncTimeout(&uart, HAL_MAX_DELAY) == HAL_OK);
+    uint32_t completed = callbacks[1], errors = callbacks[2];
+    assert(HAL_UART_Receive_IT(&uart, received, sizeof(received)) == HAL_OK);
+    /* Use a higher FIFO trigger to exercise the actual IIR=12 timeout path
+     * with one character at a time, below the data-available threshold. */
+    R328_HAL_TestWrite32(&uart.Instance->IIR_FCR, 0x49U);
+    for (uint32_t i = 0U; i < sizeof(received); ++i)
+    {
+        uint32_t before = lsr_reads;
+        for (uint32_t idle = 0U; idle < 20U; ++idle)
+        {
+            tick += 100U;
+            HAL_UART_Process(&uart);
+            HAL_UART_IRQHandler(&uart); /* A stale/no-pending IRQ must be harmless. */
+        }
+        assert(lsr_reads == before && uart.Rx.Count == sizeof(received) - i);
+        put_rx((uint8_t)('1' + i));
+        interrupts();
+        assert(uart.Rx.Count == sizeof(received) - i);
+        rx_timeout = 1U;
+        assert(R328_HAL_TestRead32(&uart.Instance->IIR_FCR) == 12U);
+        interrupts();
+        /* One LSR read for the queued character, none after the FIFO empties. */
+        assert(lsr_reads == before + 1U && uart.Rx.Count == sizeof(received) - i - 1U);
+        HAL_UART_Process(&uart);
+        assert(callbacks[2] == errors && uart.ErrorCode == HAL_UART_ERROR_NONE);
+        assert(callbacks[1] == completed + (i == sizeof(received) - 1U ? 1U : 0U));
+    }
+    assert(memcmp(received, "12345678", sizeof(received)) == 0);
+    /* A real FE/BI event must still fail, preserving status even after the
+     * failed receive resets its FIFO. Never disguise BREAK as valid data. */
+    for (uint32_t mode = 0U; mode < 2U; ++mode)
+    {
+        uint8_t *rx = (void *)(uintptr_t)0x29003U;
+        init();
+        assert((mode == 0U ? HAL_UART_Receive_IT(&uart, rx, 1U)
+                           : HAL_UART_Receive_DMA(&uart, rx, 1U)) == HAL_OK);
+        put_rx(0U);
+        line_errors = LSR_ERRORS & (HAL_UART_ERROR_FE | HAL_UART_ERROR_BI);
+        interrupts();
+        HAL_UART_Process(&uart);
+        assert(uart.ErrorCode == 24U && callbacks[2] == ++errors);
+        assert((uart.RxErrorLineStatus & (LSR_DR | LSR_ERRORS)) == (1U | 24U));
+        assert(uart.RxErrorFifoLevel == 1U && rx_in == rx_out);
+    }
+}
 static void polling_other_direction(void)
 {
     uint8_t *tx = (void *)(uintptr_t)0x28001U, *rx = (void *)(uintptr_t)0x29003U;
@@ -453,7 +552,6 @@ static void polling_other_direction(void)
     assert(uart.State == HAL_UART_STATE_BUSY_RX);
     put_rx(0x37U);
     interrupts();
-    HAL_UART_Process(&uart);
     init();
     assert(HAL_UART_Transmit_DMA(&uart, tx, 1U) == HAL_OK);
     put_rx(0x48U);
@@ -461,6 +559,22 @@ static void polling_other_direction(void)
     assert(HAL_UART_Receive(&uart, rx, 1U) == HAL_OK && rx[0] == 0x48U);
     assert(uart.State == HAL_UART_STATE_BUSY_TX);
     pump();
+    /* Opposite-direction polling holds the handle lock. Its cleanup must
+     * deliver a deferred RX completion without requiring Process or a new IRQ. */
+    for (uint32_t mode = 0U; mode < 2U; ++mode)
+    {
+        init();
+        uint32_t before = callbacks[1];
+        assert((mode == 0U ? HAL_UART_Receive_IT(&uart, rx, 1U)
+                           : HAL_UART_Receive_DMA(&uart, rx, 1U)) == HAL_OK);
+        put_rx(0x59U);
+        HAL_UART_SetPollingTimeout(1U);
+        polling_clock = polling_interrupts = 1;
+        assert(HAL_UART_Transmit(&uart, tx, 1U) == HAL_OK);
+        polling_clock = polling_interrupts = 0;
+        assert(uart.State == HAL_UART_STATE_READY && callbacks[1] == before + 1U);
+        assert(rx[0] == 0x59U);
+    }
 }
 static void map(uintptr_t address, size_t size)
 {
@@ -481,6 +595,7 @@ int main(void)
     transfers();
     completion_order();
     guards_and_errors();
+    slow_keyboard_input();
     polling_other_direction();
     assert(HAL_UART_DeInit(&uart) == HAL_OK);
     assert(HAL_DMA_DeInit(&rx_dma) == HAL_OK && HAL_DMA_DeInit(&tx_dma) == HAL_OK);
@@ -490,6 +605,7 @@ int main(void)
     transfers();
     assert(HAL_UART_DeInit(&uart) == HAL_OK);
     assert(HAL_DMA_DeInit(&rx_dma) == HAL_OK && HAL_DMA_DeInit(&tx_dma) == HAL_OK);
-    puts("UART IT/DMA full duplex, FIFO tails, TEMT, IRQ order, timeout and abort tests passed");
+    puts("UART IT/DMA full duplex, FIFO empty, wire drain, IRQ order, timeout and abort tests "
+         "passed");
     return 0;
 }

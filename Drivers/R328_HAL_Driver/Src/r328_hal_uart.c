@@ -1,5 +1,7 @@
 #include "r328_hal_bus_private.h"
 
+#include <string.h>
+
 static uint32_t polling_timeout = HAL_POLLING_DEFAULT_TIMEOUT_MS;
 void HAL_UART_SetPollingTimeout(uint32_t timeout)
 {
@@ -17,13 +19,18 @@ void HAL_UART_SetPollingTimeout(uint32_t timeout)
 #define UART_IER_LINE (1U << 2)
 #define UART_IIR_ID_MASK 0xFU
 #define UART_IIR_MODEM 0U
+#define UART_IIR_NONE 1U
+#define UART_IIR_RX_DATA 4U
+#define UART_IIR_RX_LINE 6U
 #define UART_IIR_BUSY 7U
+#define UART_IIR_RX_TIMEOUT 12U
 #define UART_LSR_DR (1U << 0)
 #define UART_LSR_ERRORS                                                                            \
     (HAL_UART_ERROR_ORE | HAL_UART_ERROR_PE | HAL_UART_ERROR_FE | HAL_UART_ERROR_BI)
 #define UART_LSR_TEMT (1U << 6)
 #define UART_USR_BUSY (1U << 0)
 #define UART_USR_TFNF (1U << 1)
+#define UART_USR_TFE (1U << 2)
 #define UART_LCR_DLAB (1U << 7)
 #define UART_RX_FIFO_LEVEL_MASK 0x1FFU
 #define UART_IRQ_BUDGET 256U
@@ -35,6 +42,7 @@ void HAL_UART_SetPollingTimeout(uint32_t timeout)
 #define UART_MODE_DMA 3U
 
 static UART_HandleTypeDef *owners[4];
+static void async_service(UART_HandleTypeDef *h, int check_timeout);
 static int valid_instance(const UART_TypeDef *instance)
 {
     return instance == UART0 || instance == UART1 || instance == UART2 || instance == UART3;
@@ -71,6 +79,11 @@ static uint32_t read_lsr(UART_HandleTypeDef *h)
      * Preserve them for the independently running receiver. */
     if (h->Rx.Mode != UART_MODE_NONE)
     {
+        if ((lsr & UART_LSR_ERRORS) != 0U && h->RxErrorLineStatus == 0U)
+        {
+            h->RxErrorLineStatus = lsr;
+            h->RxErrorFifoLevel = BUS_READ(h->Instance->RFL) & UART_RX_FIFO_LEVEL_MASK;
+        }
         h->Rx.ErrorCode |= lsr & UART_LSR_ERRORS;
         h->ErrorCode = h->Tx.ErrorCode | h->Rx.ErrorCode;
     }
@@ -80,7 +93,11 @@ static uint32_t read_lsr(UART_HandleTypeDef *h)
 static void update_interrupts(UART_HandleTypeDef *h)
 {
     uint32_t ier = 0U;
-    if (h->Tx.Mode == UART_MODE_IT && h->Tx.Count != 0U && h->Tx.ErrorCode == 0U)
+    /* Keep THRE enabled after the final FIFO write. The next empty-FIFO IRQ
+     * releases TX even if the last character is still in the shift register.
+     * DMA switches to this IRQ only after its completion interrupt. */
+    if (h->Tx.ErrorCode == 0U &&
+        (h->Tx.Mode == UART_MODE_IT || (h->Tx.Mode == UART_MODE_DMA && h->Tx.DmaDone != 0U)))
     {
         ier |= UART_IER_TX;
     }
@@ -123,6 +140,8 @@ static HAL_StatusTypeDef poll_finish(UART_HandleTypeDef *h, UART_TransferTypeDef
     update_state(h);
     HAL_Unlock(&h->Lock);
     R328_IRQ_Restore(irq_state);
+    /* An opposite-direction IRQ may have completed while polling held Lock. */
+    async_service(h, 0);
     return status;
 }
 HAL_StatusTypeDef HAL_UART_Init(UART_HandleTypeDef *handle)
@@ -185,6 +204,7 @@ HAL_StatusTypeDef HAL_UART_Init(UART_HandleTypeDef *handle)
     BUS_WRITE(uart->HALT, 0U);
     handle->Tx = (UART_TransferTypeDef){0};
     handle->Rx = (UART_TransferTypeDef){0};
+    handle->RxErrorLineStatus = handle->RxErrorFifoLevel = 0U;
     handle->XferTimeout = UART_DEFAULT_TIMEOUT_MS;
     update_state(handle);
     HAL_Unlock(&handle->Lock);
@@ -236,6 +256,10 @@ static HAL_StatusTypeDef poll_begin(UART_HandleTypeDef *h, int transmit)
     }
     transfer->Mode = UART_MODE_POLL;
     transfer->ErrorCode = HAL_UART_ERROR_NONE;
+    if (!transmit)
+    {
+        h->RxErrorLineStatus = h->RxErrorFifoLevel = 0U;
+    }
     UART_TransferTypeDef *other = transmit ? &h->Rx : &h->Tx;
     if (other->Mode == UART_MODE_NONE)
     {
@@ -293,14 +317,11 @@ HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *handle, const uint8_t *d
     result = tx_write(handle, data, size, start, timeout);
     return tx_end(handle, result, start, timeout);
 }
-static uint32_t text_length(const char *text)
+HAL_StatusTypeDef HAL_UART_FlushTx(UART_HandleTypeDef *handle)
 {
-    uint32_t length = 0U;
-    while (text[length] != '\0')
-    {
-        ++length;
-    }
-    return length;
+    const uint32_t timeout = polling_timeout;
+    HAL_StatusTypeDef result = tx_begin(handle);
+    return result == HAL_OK ? tx_end(handle, HAL_OK, HAL_GetTick(), timeout) : result;
 }
 static uint32_t decimal(uint8_t buffer[10], uint32_t value)
 {
@@ -316,7 +337,7 @@ static const char hex_digits[] = "0123456789ABCDEF";
 HAL_StatusTypeDef HAL_UART_PrintString(UART_HandleTypeDef *handle, const char *text)
 {
     return text == NULL ? HAL_ERROR
-                        : HAL_UART_Transmit(handle, (const uint8_t *)text, text_length(text));
+                        : HAL_UART_Transmit(handle, (const uint8_t *)text, strlen(text));
 }
 HAL_StatusTypeDef HAL_UART_PrintU32(UART_HandleTypeDef *handle, uint32_t value)
 {
@@ -348,7 +369,7 @@ HAL_StatusTypeDef HAL_UART_PrintValue(UART_HandleTypeDef *handle, const char *la
     uint32_t start = HAL_GetTick();
     uint8_t text[10];
     uint32_t offset = decimal(text, value);
-    result = tx_write(handle, (const uint8_t *)label, text_length(label), start, timeout);
+    result = tx_write(handle, (const uint8_t *)label, strlen(label), start, timeout);
     if (result == HAL_OK)
     {
         result = tx_write(handle, &text[offset], sizeof(text) - offset, start, timeout);
@@ -462,6 +483,13 @@ static void uart_dma_complete(DMA_HandleTypeDef *dma)
             transfer->ErrorCode |= HAL_UART_ERROR_DMA;
         }
         transfer->DmaDone = 1U;
+        /* A completed DMA receive can still have a pending line-status IRQ.
+         * Capture it before releasing the buffer; do not poll LSR while idle. */
+        if (transfer == &h->Rx)
+        {
+            (void)read_lsr(h);
+        }
+        async_service(h, 0);
     }
 }
 static HAL_StatusTypeDef async_start(UART_HandleTypeDef *h, const uint8_t *tx, uint8_t *rx,
@@ -519,6 +547,7 @@ static HAL_StatusTypeDef async_start(UART_HandleTypeDef *h, const uint8_t *tx, u
         else
         {
             h->pRxBuffPtr = rx;
+            h->RxErrorLineStatus = h->RxErrorFifoLevel = 0U;
         }
         /* DMA1: RX threshold = one byte; TX requests from empty until full.
          * No FIFO reset here: the other direction can already be running and
@@ -587,6 +616,10 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *h)
     /* Reading IIR acknowledges non-programmable THRE. Busy/modem events have
      * separate clear-on-read registers; no FIFO reads for DMA RX. */
     uint32_t cause = BUS_READ(h->Instance->IIR_FCR) & UART_IIR_ID_MASK;
+    if (cause == UART_IIR_NONE)
+    {
+        return;
+    }
     if (cause == UART_IIR_BUSY)
     {
         (void)BUS_READ(h->Instance->USR);
@@ -595,11 +628,23 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *h)
     {
         (void)BUS_READ(h->Instance->MSR);
     }
-    (void)read_lsr(h);
-    if (h->Rx.Mode == UART_MODE_IT && h->Rx.ErrorCode == HAL_UART_ERROR_NONE)
+    int receive_event =
+        cause == UART_IIR_RX_DATA || cause == UART_IIR_RX_LINE || cause == UART_IIR_RX_TIMEOUT;
+    if (cause == UART_IIR_RX_LINE)
+    {
+        (void)read_lsr(h);
+    }
+    if (receive_event && h->Rx.Mode == UART_MODE_IT && h->Rx.ErrorCode == HAL_UART_ERROR_NONE)
     {
         for (uint32_t i = 0U; i < UART_IRQ_BUDGET && h->Rx.Count != 0U; ++i)
         {
+            /* Only inspect receive status for a queued byte. In particular,
+             * do not keep sampling clear-on-read LSR while the next character
+             * is still shifting in and the FIFO is empty. */
+            if (BUS_READ(h->Instance->RFL) == 0U)
+            {
+                break;
+            }
             uint32_t lsr = read_lsr(h);
             if (h->Rx.ErrorCode != HAL_UART_ERROR_NONE || (lsr & UART_LSR_DR) == 0U)
             {
@@ -621,6 +666,7 @@ void HAL_UART_IRQHandler(UART_HandleTypeDef *h)
             --h->Tx.Count;
         }
     }
+    async_service(h, 0);
     update_interrupts(h);
 }
 /* Called with IRQs masked and the handle locked. Retain ownership if a DMA
@@ -647,7 +693,7 @@ static int finish_async(UART_HandleTypeDef *h, int transmit)
     R328_DSB();
     return 1;
 }
-void HAL_UART_Process(UART_HandleTypeDef *h)
+static void async_service(UART_HandleTypeDef *h, int check_timeout)
 {
     if (!valid_handle(h) || h->State == HAL_UART_STATE_RESET ||
         (h->Tx.Mode < UART_MODE_IT && h->Rx.Mode < UART_MODE_IT))
@@ -660,7 +706,7 @@ void HAL_UART_Process(UART_HandleTypeDef *h)
         R328_IRQ_Restore(irq_state);
         return;
     }
-    uint32_t lsr = read_lsr(h), completed = 0U, failed = 0U;
+    uint32_t completed = 0U, failed = 0U;
     for (uint32_t direction = 0U; direction < 2U; ++direction)
     {
         int transmit = direction == 0U;
@@ -674,10 +720,15 @@ void HAL_UART_Process(UART_HandleTypeDef *h)
         {
             transfer->Count = BUS_READ(DMA->CHANNEL[dma->Init.Channel].LEFT);
         }
-        int done = transfer->Count == 0U &&
-                   (transfer->Mode == UART_MODE_IT || transfer->DmaDone != 0U) &&
-                   (!transmit || (lsr & UART_LSR_TEMT) != 0U);
-        if (!done && bus_expired(transfer->Start, h->XferTimeout))
+        int done =
+            transfer->Count == 0U && (transfer->Mode == UART_MODE_IT || transfer->DmaDone != 0U);
+        /* USR is non-destructive: no LSR reads while waiting for TX empty.
+         * FIFO empty is sufficient to accept another transfer. */
+        if (done && transmit)
+        {
+            done = (BUS_READ(h->Instance->USR) & UART_USR_TFE) != 0U;
+        }
+        if (check_timeout && !done && bus_expired(transfer->Start, h->XferTimeout))
         {
             transfer->ErrorCode |= HAL_UART_ERROR_TIMEOUT;
         }
@@ -709,6 +760,10 @@ void HAL_UART_Process(UART_HandleTypeDef *h)
     {
         HAL_UART_RxCpltCallback(h);
     }
+}
+void HAL_UART_Process(UART_HandleTypeDef *h)
+{
+    async_service(h, 1);
 }
 static HAL_StatusTypeDef abort_directions(UART_HandleTypeDef *h, uint32_t directions)
 {

@@ -43,6 +43,12 @@ def main():
     check(len(binary) == symbols["__image_end__"] - args.origin, "Binary image length mismatch")
     check(symbols["__data_load__"] == symbols["__data_start__"], "RAM data must load in place")
     check(symbols["__static_end__"] <= symbols["__stack_bottom__"], "Static data overlaps stacks")
+    check(
+        symbols["__static_end__"] <= symbols["__heap_start__"] <= symbols["__heap_end__"],
+        "Invalid heap interval",
+    )
+    check(symbols["__heap_start__"] % 8 == 0, "Unaligned heap start")
+    check(symbols["__heap_end__"] == symbols["__stack_bottom__"], "Heap overlaps reserved stacks")
     check(symbols["__svc_stack_top__"] == args.origin + args.length, "Wrong RAM boundary")
     for mode in ("svc", "irq", "fiq", "abt", "und"):
         check(symbols[f"__{mode}_stack_top__"] % 8 == 0, f"Unaligned {mode} stack")

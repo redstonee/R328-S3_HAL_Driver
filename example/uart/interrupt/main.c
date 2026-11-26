@@ -6,6 +6,9 @@ static UART_HandleTypeDef huart0;
 static uint8_t rx_blocks[2][UART_BLOCK_BYTES];
 static volatile uint32_t rx_ready, tx_ready, uart_error;
 static uint32_t receive_index;
+static volatile uint32_t error_rx_remaining, error_rx_pin;
+static volatile uint32_t error_lcr, error_mcr, error_halt;
+static volatile uint32_t error_lsr, error_fifo_level;
 
 volatile uint32_t g_application_error;
 
@@ -62,7 +65,8 @@ static void app_init(const char *banner)
     (void)HAL_UART_PrintString(&huart0, "\r\nstatus: 0=OK 1=ERROR 2=BUSY 3=TIMEOUT\r\n");
 }
 
-/* HAL callbacks run in foreground Process/Abort, after the handle unlocks. */
+/* Normal callbacks run in UART/DMA IRQ context, after unlocking.
+ * Only record flags/snapshots here; print and process data in the main loop. */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *handle)
 {
     if (handle == &huart0)
@@ -79,10 +83,46 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *handle)
 }
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *handle)
 {
-    if (handle == &huart0)
+    if (handle == &huart0 && uart_error == HAL_UART_ERROR_NONE)
     {
+        /* The driver has already saved the clear-on-read LSR error bits. Do not
+         * read IIR/LSR here: that would acknowledge or clear another event. */
+        error_lsr = handle->RxErrorLineStatus;
+        error_fifo_level = handle->RxErrorFifoLevel;
+        error_rx_remaining = handle->Rx.Count;
+        error_rx_pin = (uint32_t)HAL_GPIO_ReadPin(GPIOH, GPIO_PIN_1);
+        error_lcr = handle->Instance->LCR;
+        error_mcr = handle->Instance->MCR;
+        error_halt = handle->Instance->HALT;
         uart_error |= handle->ErrorCode;
     }
+}
+
+static void report_uart_error(uint32_t error)
+{
+    (void)HAL_UART_PrintValue(&huart0, "UART ErrorCode=", error);
+    if ((error & HAL_UART_ERROR_FE) != 0U)
+    {
+        (void)HAL_UART_PrintString(&huart0, "FE: receiver did not detect a valid stop bit.\r\n");
+    }
+    if ((error & HAL_UART_ERROR_BI) != 0U)
+    {
+        (void)HAL_UART_PrintString(&huart0, "BI: receiver detected a BREAK (RX held low).\r\n");
+    }
+    (void)HAL_UART_PrintString(&huart0, "First error LSR=0x");
+    (void)HAL_UART_PrintHex(&huart0, error_lsr);
+    (void)HAL_UART_PrintString(&huart0, "\r\n");
+    (void)HAL_UART_PrintValue(&huart0, "FIFO level at first error=", error_fifo_level);
+    (void)HAL_UART_PrintValue(&huart0, "RX bytes remaining=", error_rx_remaining);
+    (void)HAL_UART_PrintValue(&huart0, "PH1 level at error callback=", error_rx_pin);
+    (void)HAL_UART_PrintValue(&huart0, "UART PCLK Hz=", HAL_RCC_GetPCLK2Freq());
+    (void)HAL_UART_PrintString(&huart0, "LCR=0x");
+    (void)HAL_UART_PrintHex(&huart0, error_lcr);
+    (void)HAL_UART_PrintString(&huart0, " MCR=0x");
+    (void)HAL_UART_PrintHex(&huart0, error_mcr);
+    (void)HAL_UART_PrintString(&huart0, " HALT=0x");
+    (void)HAL_UART_PrintHex(&huart0, error_halt);
+    (void)HAL_UART_PrintString(&huart0, "\r\n");
 }
 
 int main(void)
@@ -91,24 +131,21 @@ int main(void)
     (void)HAL_UART_PrintString(
         &huart0, "Send exactly 8 bytes (e.g. 12345678), then wait for the raw echo.\r\n"
                  "No newline/idle detection; disable terminal local echo.\r\n");
-    /* Interactive RX can take arbitrarily long; use application deadlines when
-     * needed. The HAL default deadline would otherwise expire after 100 ms. */
-    require_ok("UART timeout=", HAL_UART_SetAsyncTimeout(&huart0, HAL_MAX_DELAY));
     require_ok("RX start=", HAL_UART_Receive_IT(&huart0, rx_blocks[0], UART_BLOCK_BYTES));
     static const uint8_t ready[] = "\r\nReady.\r\n";
     require_ok("TX start=", HAL_UART_Transmit_IT(&huart0, ready, sizeof(ready) - 1U));
     for (;;)
     {
-        HAL_UART_Process(&huart0);
         if (uart_error != HAL_UART_ERROR_NONE)
         {
             uint32_t saved_error = uart_error;
-            /* Stop DMA before releasing either buffer, then report via polling. */
+            /* The error callback preserves the first failure snapshot even if
+             * aborting the other direction produces a second callback. */
             if (HAL_UART_Abort(&huart0) != HAL_OK)
             {
                 Error_Handler();
             }
-            (void)HAL_UART_PrintValue(&huart0, "UART ErrorCode=", saved_error);
+            report_uart_error(saved_error);
             Error_Handler();
         }
         if (rx_ready != 0U && tx_ready != 0U)
@@ -123,7 +160,7 @@ int main(void)
                        HAL_UART_Receive_IT(&huart0, rx_blocks[receive_index], UART_BLOCK_BYTES));
             require_ok("TX start=", HAL_UART_Transmit_IT(&huart0, completed, UART_BLOCK_BYTES));
         }
-        /* Keep servicing Process: the architecture counter does not wake WFI,
-         * and TEMT has no dedicated transfer-complete interrupt. */
+        /* No Process call is needed. Leave this loop running to avoid a
+         * check-then-WFI race with the completion flags. */
     }
 }

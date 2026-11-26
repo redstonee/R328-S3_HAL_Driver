@@ -64,7 +64,7 @@ SECTIONS
         . = ALIGN(8);
     } > RAM :data
     __static_end__ = .;
-    /* No allocator: leave all free RAM between static storage and stacks. */
+    /* newlib heap grows through unused RAM, below every reserved mode stack. */
     __stack_top__ = ORIGIN(RAM) + LENGTH(RAM);
     __svc_stack_top__ = __stack_top__;
     __irq_stack_top__ = __svc_stack_top__ - 8192;
@@ -72,6 +72,8 @@ SECTIONS
     __abt_stack_top__ = __fiq_stack_top__ - 512;
     __und_stack_top__ = __abt_stack_top__ - 512;
     __stack_bottom__ = __und_stack_top__ - 512;
+    __heap_start__ = ALIGN(__static_end__, 8);
+    __heap_end__ = __stack_bottom__;
     /DISCARD/ :
     {
         *(.comment)
@@ -80,4 +82,5 @@ SECTIONS
     ASSERT((ORIGIN(RAM) & 31) == 0, "RAM origin must be vector aligned")
     ASSERT((LENGTH(RAM) & 7) == 0, "RAM length must preserve stack alignment")
     ASSERT(__static_end__ <= __stack_bottom__, "Firmware overlaps reserved stacks")
+    ASSERT(__heap_start__ <= __heap_end__, "No RAM available for heap")
 }

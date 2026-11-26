@@ -82,6 +82,11 @@ target_include_directories(
 target_compile_definitions(hal_timebase_tests PRIVATE R328_HAL_HOST_TEST=1)
 target_compile_options(hal_timebase_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME hal_timebase COMMAND hal_timebase_tests)
+add_executable(sysmem_tests sysmem_tests.c ../Core/Src/sysmem.c)
+target_include_directories(sysmem_tests PRIVATE ../Drivers/Device/Include)
+target_compile_definitions(sysmem_tests PRIVATE R328_HAL_HOST_TEST=1)
+target_compile_options(sysmem_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME newlib_heap_bounds COMMAND sysmem_tests)
 add_executable(
     display_example_tests display_example_tests.c ../example/spi/ili9341_xpt2046/ili9341.c
                           ../example/spi/ili9341_xpt2046/xpt2046.c ../example/spi/ili9341_xpt2046/display_bus.c
@@ -93,12 +98,6 @@ target_include_directories(
 target_compile_definitions(display_example_tests PRIVATE R328_HAL_HOST_TEST=1)
 target_compile_options(display_example_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME display_example_protocol COMMAND display_example_tests)
-add_executable(runtime_tests runtime_tests.c ../Core/Src/runtime_r328.c)
-# Keep host libc untouched while testing the freestanding implementations.
-target_compile_definitions(runtime_tests PRIVATE memset=R328_Memset memcpy=R328_Memcpy
-                                                memmove=R328_Memmove memcmp=R328_Memcmp)
-target_compile_options(runtime_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG -fno-builtin)
-add_test(NAME freestanding_memory COMMAND runtime_tests)
 find_package(
     Python3
     COMPONENTS Interpreter
