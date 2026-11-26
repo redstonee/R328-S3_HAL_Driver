@@ -8,7 +8,7 @@ project(
 if(NOT CMAKE_CROSSCOMPILING)
     message(
         FATAL_ERROR
-            "Use cmake --preset sram-debug, or pass -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake"
+            "Use cmake --preset fel-debug, or pass -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake"
     )
 endif()
 set(CMAKE_C_STANDARD 11)

@@ -52,10 +52,10 @@ SPI NAND / W25Q64 SPI NOR 冷启动共用必要的 32 KiB boot0 prebuilt，初�
 | --- | --- | --- |
 | `fel-debug` / `fel-release` | `0x20000`，128 KiB | 复位后的 BROM FEL，scratchpad 引导搬运 |
 | `fel-direct` | `0x28000`，32 KiB | 原先的保守 FEL 布局，供回退 |
-| `sram-debug` / `sram-release` | `0x20000`，128 KiB | 调试器或 loader 已准备 SRAM，且不占用应用区域 |
-| `ddr-debug` | `0x40000000`，128 MiB | 外部 loader 已初始化并释放整个 DDR 窗口 |
 | `nand-debug` / `nand-release` | `0x40000000`，128 MiB | SPI NAND 冷启动，boot0 初始化 DDR 后直接执行应用 |
 | `nor-debug` / `nor-release` | `0x40000000`，128 MiB | W25Q64 SPI NOR 冷启动，源码读取器加载应用 |
+
+`sram-debug`、`sram-release` 和 `ddr-debug` 为隐藏基础配置，不出现在预设列表，也不能直接通过 `--preset` 调用。调试器或外部 loader 加载请使用下方的自定义构建方式。
 
 SRAM A1 总容量为 **128 KiB**，默认 FEL 配置全部用于代码、静态数据、空闲区和栈。应用 BIN 暂存上限为 **64 KiB**，BSS 不占用 BIN。可复制 [SRAM 例程](example/sram/README.md) 运行空闲区写入 / 回读测试；加载流程和限制见 [内存说明](docs/fel-sram.md#容量和限制)。
 

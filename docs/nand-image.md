@@ -38,7 +38,7 @@ ctest --preset nand-debug
 
 boot0 先将 TOC1 读到 `0x42E00000`，然后将应用复制到 `0x40000000`。复制完成、关闭 MMU 后该暂存区及页表不再使用，可以由应用的 BSS、空闲区使用；应用 BIN 的复制范围不能与暂存源重叠，工具会检查。NAND 启动区域另限制 BIN 最大 **3,145,216 字节**；BSS 不占 BIN。
 
-[Flash 启动头部](../Core/Startup/flash_header.S) 在八个异常向量之后保留元数据，使 BIN 的 `+0x2C` 为加载地址 `0x40000000`，真正的代码从 `+0x200` 之后开始。头部也在 ELF 内，ELF 与 BIN 保持一致；不能直接打包普通 `ddr-debug` 产物。
+[Flash 启动头部](../Core/Startup/flash_header.S) 在八个异常向量之后保留元数据，使 BIN 的 `+0x2C` 为加载地址 `0x40000000`，真正的代码从 `+0x200` 之后开始。头部也在 ELF 内，ELF 与 BIN 保持一致；不能直接打包未启用 Flash 启动头部的普通 DDR 产物。
 
 TOC1 条目名使用 `freertos`，这是该版本 boot0 内已有的**直接应用分发标识**，不表示工程依赖 FreeRTOS。反汇编确认它将应用地址存入独立入口变量，跳过 U-Boot 头修改、monitor/OP-TEE 交接分支。应用维持 Secure SVC，`nand-*` 使用 `SECURE` GIC Group 0，UART0 默认 PH0/PH1、115200 8N1。
 

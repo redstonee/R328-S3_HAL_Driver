@@ -61,8 +61,6 @@ cmake --build build/fel-debug --target fel-run
 | --- | --- |
 | `fel-debug` / `fel-release` | BROM FEL 加载，128 KiB SRAM 运行 |
 | `fel-direct` | 原 32 KiB SRAM FEL 回退配置 |
-| `sram-debug` / `sram-release` | 调试器或外部 loader 加载到 SRAM |
-| `ddr-debug` | 外部 loader 已初始化并释放 128 MiB DDR |
 | `nand-debug` / `nand-release` | SPI NAND 冷启动，boot0 初始化 DDR 后直接执行应用 |
 | `nor-debug` / `nor-release` | W25Q64 SPI NOR 冷启动，初始化 DDR 后直接执行应用 |
 

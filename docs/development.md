@@ -55,7 +55,7 @@ cmake --build --preset fel-debug
 ctest --preset fel-debug
 ```
 
-验证例程时，按 [复制说明](../example/README.md) 将源码和头文件放入 `Core/Src/`、`Core/Inc/`，继续使用同一内存 / 加载预设。启动、链接或优化相关修改还应检查 `fel-release`、`sram-debug` 和 `ddr-debug`。
+验证例程时，按 [复制说明](../example/README.md) 将源码和头文件放入 `Core/Src/`、`Core/Inc/`，继续使用同一内存 / 加载预设。启动、链接或优化相关修改还应检查 `fel-release` 以及 NAND / NOR 的 DDR 构建配置。
 
 验证 NAND 打包时，运行 `nand-debug` / `nand-release` 的构建与 CTest，不需要系统镜像。校验会从 prebuilt 和应用重建页布局、各副本和校验值；安装 QEMU 时另执行 boot0 的真实复制和直接交接路径。DDR / NAND 硬件初始化仍需实板验证，见 [NAND 说明](nand-image.md)。
 

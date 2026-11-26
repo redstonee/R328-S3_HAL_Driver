@@ -8,6 +8,7 @@
   "configurePresets": [
     {
       "name": "sram-debug",
+      "hidden": true,
       "displayName": "R328-S3 loader/debugger to SRAM, Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
@@ -42,6 +43,7 @@
     },
     {
       "name": "ddr-debug",
+      "hidden": true,
       "inherits": "sram-debug",
       "displayName": "R328-S3 loader to initialized DDR, Debug",
       "cacheVariables": {
@@ -52,6 +54,7 @@
     },
     {
       "name": "sram-release",
+      "hidden": true,
       "inherits": "sram-debug",
       "displayName": "R328-S3 loader/debugger to SRAM, Release",
       "cacheVariables": {
@@ -105,6 +108,7 @@
   "buildPresets": [
     {
       "name": "sram-debug",
+      "hidden": true,
       "configurePreset": "sram-debug"
     },
     {
@@ -117,10 +121,12 @@
     },
     {
       "name": "ddr-debug",
+      "hidden": true,
       "configurePreset": "ddr-debug"
     },
     {
       "name": "sram-release",
+      "hidden": true,
       "configurePreset": "sram-release"
     },
     {
@@ -147,6 +153,7 @@
   "testPresets": [
     {
       "name": "sram-debug",
+      "hidden": true,
       "configurePreset": "sram-debug",
       "output": {
         "outputOnFailure": true
@@ -168,6 +175,7 @@
     },
     {
       "name": "ddr-debug",
+      "hidden": true,
       "configurePreset": "ddr-debug",
       "output": {
         "outputOnFailure": true
@@ -175,6 +183,7 @@
     },
     {
       "name": "sram-release",
+      "hidden": true,
       "configurePreset": "sram-release",
       "output": {
         "outputOnFailure": true
