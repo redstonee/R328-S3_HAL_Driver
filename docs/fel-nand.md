@@ -27,7 +27,7 @@ ctest --preset nand-debug
 
 如果 xfel 已在 PATH 中，第一条命令直接使用 `cmake --preset nand-debug`。也可使用 `nand-release` 及相应构建目录。
 
-按住 FEL 键复位，让芯片进入 **BROM FEL**，先探测芯片及前 32 块的坏块标记：
+按住 FEL 键复位，让芯片进入 **BROM FEL**，然后**立即松开 FEL 键**。松开后仍保持 FEL 状态。探测、读取、校验及烧写期间都必须保持按键松开，持续按住会导致 SPI Flash 无法读写。先探测芯片及前 32 块的坏块标记：
 
 ```sh
 cmake --build build/nand-debug --target fel-probe
@@ -39,7 +39,7 @@ cmake --build build/nand-debug --target fel-probe
 cmake --build build/nand-debug --target fel-flash
 ```
 
-**该命令会覆盖前 4 MiB 启动区域中的好块。** 块 32–1023（后 124 MiB）不擦写。脚本扫描坏块、检查可用完整副本、擦除好块、按页编程并回读所有好块的主数据，包括镜像中的 `FF` 空白区域，最后再次检查坏块标记。成功显示 `NAND readback PASS`。松开 FEL 键并复位或断电重启，即可尝试冷启动。
+**该命令会覆盖前 4 MiB 启动区域中的好块。** 块 32–1023（后 124 MiB）不擦写。脚本扫描坏块、检查可用完整副本、擦除好块、按页编程并回读所有好块的主数据，包括镜像中的 `FF` 空白区域，最后再次检查坏块标记。成功显示 `NAND readback PASS`。保持 FEL 键松开，复位或断电重启，即可尝试冷启动。
 
 单独回读校验，不擦写 Flash：
 
@@ -73,7 +73,7 @@ python3 tools/fel_nand.py flash \
 
 E4AB 上电默认整片写保护。执行擦写时，辅助程序临时清除易失的 A0 块保护位，操作结束后恢复先前值；不绕过 BPRWD / Solid Protection，不访问 OTP 或设置永久保护位。B0 的内部 ECC 会保持启用；若芯片已经进入 OTP 访问模式则直接拒绝操作。
 
-遇到 USB 中断、BUSY 超时、擦写失败或回读不一致会立即停止，不自动重试、不搬移副本、不自动将块标为坏块。中断时启动区可能只写入了一部分，日志会报告失败的物理地址。先检查原因，必要时重新进入 FEL 后执行完整烧写。
+遇到 USB 中断、BUSY 超时、擦写失败或回读不一致会立即停止，不自动重试、不搬移副本、不自动将块标为坏块。中断时启动区可能只写入了一部分，日志会报告失败的物理地址。先确认 FEL 键已经松开，再检查连接等原因；必要时重新进入 FEL、立即松开按键后执行完整烧写。
 
 ## SRAM 与测试范围
 

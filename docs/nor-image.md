@@ -50,7 +50,7 @@ NOR 使用 **SPI0 / CS0**，与例程中显示屏 / 触摸所用的 SPI1 独立�
 
 使用支持对应 W25Q64 型号的 SPI NOR 烧录器，擦除后将 `firmware-nor.bin` 写到 **地址 0**，回读校验后冷启动。镜像是普通线性地址数据，不带 NAND 页间隔、OOB 或 ECC；不能沿用 NAND 的物理页烧写流程。本布局只有一个 boot0 和应用副本。
 
-也可通过 USB FEL 烧写，无需外接烧录器：进入 BROM FEL 后，先执行 `cmake --build build/nor-debug --target fel-probe` 检测，再执行 `cmake --build build/nor-debug --target fel-flash` 擦除、编程并整片回读校验。**该目标会擦除整颗 8 MiB W25Q64。** 只读校验用 `fel-verify`；具体流程和限制见 [xfel 烧写说明](fel-nor.md)。
+也可通过 USB FEL 烧写，无需外接烧录器：进入 BROM FEL 后立即松开 FEL 键，再执行 `cmake --build build/nor-debug --target fel-probe` 检测，再执行 `cmake --build build/nor-debug --target fel-flash` 擦除、编程并整片回读校验。**该目标会擦除整颗 8 MiB W25Q64。** 只读校验用 `fel-verify`；具体流程和限制见 [xfel 烧写说明](fel-nor.md)。
 
 R328 手册 3.4.2 说明默认 Try Media 顺序为 SPI NOR → SPI NAND，eFuse 指定启动介质时以芯片配置为准。原版 [xfel 的 R328 后端](https://github.com/xboot/xfel/blob/main/chips/r328.c) 尚未实现 `xfel spinor write`，本工程用原版的 `read / write / exec` 调用 SRAM 烧写程序。`fel-run` 仍只用于 SRAM 应用调试。
 

@@ -165,7 +165,10 @@ def run(command, helper_manifest, xfel="xfel", image=None, manifest=None, dry_ru
             # Detect marker damage or a new bad block before claiming success.
             require(scan(session) == bad, "Bad-block markers changed during operation")
             if changed:
-                print("Flash complete. Release FEL and reset/power-cycle to cold boot.", flush=True)
+                print(
+                    "Flash complete. Keep the FEL button released and reset/power-cycle to cold boot.",
+                    flush=True,
+                )
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
         if changed:
             print(

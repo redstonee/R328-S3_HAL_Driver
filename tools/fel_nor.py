@@ -170,6 +170,11 @@ class Session:
         return data
 
     def connect(self, helper):
+        print(
+            "Release the FEL button immediately after entering BROM FEL; "
+            "keep it released during Flash operations.",
+            flush=True,
+        )
         version = self.invoke("version")
         chip = re.search(r"AWUSBFEX\s+ID=0x([0-9a-fA-F]+)\b", version)
         scratch = re.search(r"scratchpad=0x([0-9a-fA-F]+)\b", version)
@@ -274,7 +279,10 @@ def run(command, helper_manifest, xfel="xfel", image=None, manifest=None, dry_ru
                 )
             verify(session, data)
             if changed:
-                print("Flash complete. Release FEL and reset/power-cycle to cold boot.", flush=True)
+                print(
+                    "Flash complete. Keep the FEL button released and reset/power-cycle to cold boot.",
+                    flush=True,
+                )
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):
         if changed:
             print(

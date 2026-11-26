@@ -8,9 +8,11 @@
 cmake --preset fel-debug
 cmake --build --preset fel-debug
 ctest --preset fel-debug
-# 进入复位后的 BROM FEL：
+# 按住 FEL 键复位，进入 BROM FEL 后立即松开按键，再执行：
 cmake --build build/fel-debug --target fel-run
 ```
+
+FEL 键仅在复位进入 FEL 时按住，进入后立即松开；松开不会退出 FEL。后续下载或 Flash 操作期间保持松开，持续按住会导致 SPI Flash 无法读写。
 
 需要 [xfel](https://github.com/xboot/xfel)。不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。发布构建使用 `fel-release`，例程按 [复制说明](../example/README.md) 放入 `Core` 后，沿用相同预设。
 
@@ -71,7 +73,7 @@ BROM 同时使用低端和高端 SRAM，不能在 USB 下载期间覆盖它的�
 cmake --preset fel-direct
 cmake --build --preset fel-direct
 ctest --preset fel-direct
-# 重新进入 BROM FEL 后：
+# 重新进入 BROM FEL 后立即松开 FEL 键，再执行：
 cmake --build build/fel-direct --target fel-run
 ```
 
@@ -86,7 +88,7 @@ cp example/sram/memory/main.c Core/Src/main.c
 cmake --preset fel-debug
 cmake --build --preset fel-debug
 ctest --preset fel-debug
-# 进入 BROM FEL 后：
+# 按住 FEL 键复位，进入 BROM FEL 后立即松开按键，再执行：
 cmake --build build/fel-debug --target fel-run
 ```
 

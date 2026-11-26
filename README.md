@@ -1,6 +1,8 @@
 # R328-S3 HAL 裸机框架
 
-面向 Allwinner R328-S3（双核 ARM Cortex-A7）的 C11 + CMake 裸机工程，采用接近 STM32 HAL 的 `Handle / Init / MspInit / Callback` 接口。当前仅使用 CPU0，不依赖操作系统、newlib 或动态内存。
+面向 Allwinner R328-S3（双核 ARM Cortex-A7）的 C11 + CMake 裸机工程，采用接近 STM32 HAL 的 `Handle / Init / MspInit / Callback` 接口。
+支持DRAM、SRAM运行，支持 SPI NAND / SPI NOR 刷写和冷启动，提供 GPIO、UART、SPI、I²C / TWI、I²S / IIS、LEDC、Timer / GIC、时基等外设的轮询 / 中断 / DMA 接口。
+当前仅使用 CPU0，不依赖操作系统、newlib 或动态内存。
 
 ## 快速开始
 
@@ -12,11 +14,13 @@ cmake --build --preset fel-debug
 ctest --preset fel-debug
 ```
 
-进入 BROM FEL 后执行：
+按住 FEL 键复位，进入 BROM FEL 后**立即松开 FEL 键**，再执行：
 
 ```sh
 cmake --build build/fel-debug --target fel-run
 ```
+
+**FEL 键只在复位进入 FEL 时按住。进入后立即松开，并在下载、探测、读取和烧写期间保持松开；持续按住会导致 SPI Flash 无法读写。松开按键不会退出 FEL。**
 
 xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。
 
@@ -68,11 +72,11 @@ cmake --build --preset nand-debug
 ctest --preset nand-debug
 ```
 
-产物为 `build/nand-debug/firmware-nand.bin`，包含 boot0 和应用包的多个副本。它是物理页主数据镜像，烧写时须启用芯片内部 ECC、保留坏块标记及物理偏移。默认芯片为 **MX35LF1GE4AB（128 MiB，ID C2 12）**。进入 BROM FEL 后，使用 `cmake --build build/nand-debug --target fel-probe` 检测并扫描启动区坏块，`--target fel-flash` 烧写并回读校验，`--target fel-verify` 单独校验。只擦写前 4 MiB 中的好块，保留物理偏移及其余 124 MiB。步骤见 [xfel NAND 烧写](docs/fel-nand.md)，格式见 [SPI NAND 与 DDR 说明](docs/nand-image.md)。
+产物为 `build/nand-debug/firmware-nand.bin`，包含 boot0 和应用包的多个副本。它是物理页主数据镜像，烧写时须启用芯片内部 ECC、保留坏块标记及物理偏移。默认芯片为 **MX35LF1GE4AB（128 MiB，ID C2 12）**。进入 BROM FEL 并立即松开 FEL 键后，使用 `cmake --build build/nand-debug --target fel-probe` 检测并扫描启动区坏块，`--target fel-flash` 烧写并回读校验，`--target fel-verify` 单独校验。只擦写前 4 MiB 中的好块，保留物理偏移及其余 124 MiB。步骤见 [xfel NAND 烧写](docs/fel-nand.md)，格式见 [SPI NAND 与 DDR 说明](docs/nand-image.md)。
 
 MX35LF1GE4AB 已通过全量回读及断电冷启动验证，应用 tick 正常。boot0 必须使用每页完整 2 KiB 的布局，副本位于块 0、2、4、6；旧版每页 1 KiB 的镜像需重新打包烧写，见 [ROM 排查与验证记录](docs/nand-boot-debug.md)。
 
-W25Q64 使用 `cmake --preset nor-debug`、`cmake --build --preset nor-debug`，生成 **8 MiB** 的 `build/nor-debug/firmware-nor.bin`，从 Flash 地址 0 写入；应用包位于 `0x10000`。进入 BROM FEL 后可用 `cmake --build build/nor-debug --target fel-probe` 检测、`--target fel-flash` 整片擦写并回读校验，无需修改原版 xfel；**烧写会覆盖整颗 8 MiB Flash**。使用 SPI0 的 PC0 / PC2 / PC3 / PC4，boot0 日志默认 PH0 / PH1，应用自行配置 UART。接线和布局见 [SPI NOR 说明](docs/nor-image.md)，USB 烧写步骤见 [xfel NOR 烧写](docs/fel-nor.md)。擦写和冷启动均尚未实板验证。
+W25Q64 使用 `cmake --preset nor-debug`、`cmake --build --preset nor-debug`，生成 **8 MiB** 的 `build/nor-debug/firmware-nor.bin`，从 Flash 地址 0 写入；应用包位于 `0x10000`。进入 BROM FEL 并立即松开 FEL 键后可用 `cmake --build build/nor-debug --target fel-probe` 检测、`--target fel-flash` 整片擦写并回读校验，无需修改原版 xfel；**烧写会覆盖整颗 8 MiB Flash**。使用 SPI0 的 PC0 / PC2 / PC3 / PC4，boot0 日志默认 PH0 / PH1，应用自行配置 UART。接线和布局见 [SPI NOR 说明](docs/nor-image.md)，USB 烧写步骤见 [xfel NOR 烧写](docs/fel-nor.md)。擦写和冷启动均尚未实板验证。
 
 每个构建目录生成 `firmware.elf`、`firmware.bin`、`firmware.hex`、`firmware.map` 和 `compile_commands.json`。FEL 配置另生成 `firmware-fel.bin` 与描述地址、长度、SHA256 的 `firmware-fel.json`；FULL 配置还生成配套的 `firmware-fel-loader.bin`。
 

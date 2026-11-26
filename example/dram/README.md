@@ -21,7 +21,7 @@ cmake --build --preset nand-debug
 ctest --preset nand-debug
 # 进入 BROM FEL 后，重新烧写包含该例程的 NAND 启动镜像：
 cmake --build build/nand-debug --target fel-flash
-# 松开 FEL 键，断电再上电；观察 PH0/PH1、115200 8N1 串口。
+# 保持 FEL 键松开，然后复位或者重新上电；观察 PH0/PH1、115200 8N1 串口。
 ```
 
 烧写只操作 NAND 前 4 MiB 启动区，详见 [NAND 烧写](../../docs/fel-nand.md)。也可使用 `nand-release`，或用 `nor-debug` / `nor-release` 打包为 NOR 镜像；NOR 烧写会覆盖整颗 8 MiB Flash。使用外部 loader 时，需先初始化 DRAM，再通过[自定义构建](../../README.md#构建配置)选择 DDR 并加载、执行应用。`fel-debug` 只加载到 SRAM，不会初始化 DRAM，本例会报告 `DRAM SKIP`。

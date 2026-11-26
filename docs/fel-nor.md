@@ -14,7 +14,7 @@ ctest --preset nor-debug
 
 xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/xfel`。`nor-release` 提供相同烧写目标。
 
-让 R328 复位进入 **BROM FEL** 后，先只检测器件：
+按住 FEL 键复位，进入 **BROM FEL** 后**立即松开 FEL 键**。松开后仍保持 FEL 状态。探测、读取、校验及烧写期间都必须保持按键松开，持续按住会导致 SPI Flash 无法读写。先只检测器件：
 
 ```sh
 cmake --build build/nor-debug --target fel-probe
@@ -26,7 +26,7 @@ cmake --build build/nor-debug --target fel-probe
 cmake --build build/nor-debug --target fel-flash
 ```
 
-**`fel-flash` 擦除整颗 8 MiB W25Q64，覆盖原有内容。** 它使用当前构建的 `firmware-nor.bin`，完成后逐字节回读校验整片，包括填 `0xFF` 的空白区。显示 `Full NOR readback PASS` 后，松开 FEL 键并复位 / 重新上电，验证 boot0 日志及应用行为（默认模板无 UART 输出）。程序不会自行退出 FEL 或启动应用。
+**`fel-flash` 擦除整颗 8 MiB W25Q64，覆盖原有内容。** 它使用当前构建的 `firmware-nor.bin`，完成后逐字节回读校验整片，包括填 `0xFF` 的空白区。显示 `Full NOR readback PASS` 后，保持 FEL 键松开，复位 / 重新上电，验证 boot0 日志及应用行为（默认模板无 UART 输出）。程序不会自行退出 FEL 或启动应用。
 
 只回读校验当前镜像，不擦除、不编程：
 
@@ -81,7 +81,7 @@ python3 tools/fel_nor.py flash \
 
 - `Expected R328` / scratchpad 不符：尚未下载，检查芯片和 BROM FEL 状态。
 - SRAM 回读或 CRC 不符：命令停止；检查 USB 连接后重新进入 FEL。
-- JEDEC 不符：检查型号、SPI0 接线及 `/WP`、`/HOLD` 电平，不会按其他器件继续擦写。
+- JEDEC 不符：先确认进入 FEL 后已松开 FEL 键，再检查型号、SPI0 接线及 `/WP`、`/HOLD` 电平，不会按其他器件继续擦写。
 - 写保护 / WEL 被拒绝：程序不会自动修改保护、QE 或状态寄存器。按具体器件配置解除保护后重试。
 - USB、SPI 或 BUSY 超时：操作可能已经开始，不自动重试；若正在擦写，应修复问题并重新执行完整 `fel-flash`。
 - 校验不符：报告第一个错误的 Flash 地址和字节；包括个别块锁定等未能实际写入的情况。
