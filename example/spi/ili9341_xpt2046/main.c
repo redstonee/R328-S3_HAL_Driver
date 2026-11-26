@@ -1,12 +1,14 @@
 #include "example.h"
 #include "ili9341.h"
 #include "xpt2046.h"
+#include "display_bus.h"
 
 static void require_ok(const char *label, HAL_StatusTypeDef status)
 {
     if (status != HAL_OK)
     {
         Example_Report(label, status);
+        Example_PrintValue("SPI ErrorCode=", hspi1.ErrorCode);
         ILI9341_Backlight(0U);
         Error_Handler();
     }
@@ -29,13 +31,16 @@ static void color_bars(void)
 }
 int main(void)
 {
-    Example_Init("ILI9341 + XPT2046 / shared SPI1 / mode 0 / 2 MHz");
+    Example_Init("ILI9341 + XPT2046 / shared SPI1 / per-device clock / mode 0");
+    require_ok("SPI DMA init=", Display_SPI_Init());
     HAL_StatusTypeDef status = ILI9341_Init();
     Example_Report("ILI9341 init=", status);
     require_ok("ILI9341 failed=", status);
+    Example_PrintValue("LCD actual SPI Hz=", hspi1.ActualBaudRateHz);
     status = XPT2046_Init();
     Example_Report("XPT2046 init=", status);
     require_ok("XPT2046 failed=", status);
+    Example_PrintValue("Touch actual SPI Hz=", hspi1.ActualBaudRateHz);
 
     static const uint16_t fills[] = {ILI9341_RED, ILI9341_GREEN, ILI9341_BLUE};
     for (uint32_t i = 0U; i < sizeof(fills) / sizeof(fills[0]); ++i)
@@ -44,8 +49,8 @@ int main(void)
         HAL_Delay(700U);
     }
     color_bars();
-    (void)Board_ConsoleWrite("Touch to paint; send c to restore bars. Coordinates use initial "
-                             "calibration estimates.\r\n");
+    (void)Board_ConsoleWrite("Touch to paint; c=restore bars; p=polling, i=interrupt, d=DMA.\r\n"
+                             "Mode changes redraw bars; initial calibration estimates.\r\n");
     uint32_t last_report = HAL_GetTick() - 200U;
     for (;;)
     {
@@ -74,9 +79,24 @@ int main(void)
             }
         }
         uint8_t byte;
-        if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK && (byte == 'c' || byte == 'C'))
+        if (HAL_UART_Receive(&huart0, &byte, 1U, 0U) == HAL_OK)
         {
-            color_bars();
+            if (byte == 'p' || byte == 'i' || byte == 'd')
+            {
+                Display_SPI_Mode mode = byte == 'p'   ? DISPLAY_SPI_POLLING
+                                        : byte == 'i' ? DISPLAY_SPI_INTERRUPT
+                                                      : DISPLAY_SPI_DMA;
+                require_ok("SPI mode=", Display_SPI_SetMode(mode));
+                (void)Board_ConsoleWrite(byte == 'p'   ? "Mode=polling\r\n"
+                                         : byte == 'i' ? "Mode=interrupt\r\n"
+                                                       : "Mode=DMA\r\n");
+                color_bars();
+                (void)Board_ConsoleWrite("Color bars complete; touch to paint.\r\n");
+            }
+            else if (byte == 'c' || byte == 'C')
+            {
+                color_bars();
+            }
         }
         HAL_Delay(20U);
     }

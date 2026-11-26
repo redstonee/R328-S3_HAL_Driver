@@ -31,6 +31,7 @@
 #define RCC_LEDC_CLK R328_CCU_REG(0x0BF0U)
 #define RCC_LEDC_BGR R328_CCU_REG(0x0BFCU)
 #define RCC_PLL_AUDIO_CTRL R328_CCU_REG(0x0078U)
+#define RCC_PLL_PERI0_CTRL R328_CCU_REG(0x0020U)
 #define RCC_PLL_AUDIO_PAT0 R328_CCU_REG(0x0178U)
 
 typedef struct
@@ -91,9 +92,11 @@ typedef struct
     __IO uint32_t IER, ISR, FCR, FSR, WCR, CCR;
     uint32_t RESERVED2[2];
     __IO uint32_t MBC, MTC, BCC;
-    uint32_t RESERVED3[(0x200U - 0x3CU) / 4U];
+    uint32_t RESERVED3[(0x88U - 0x3CU) / 4U];
+    __IO uint32_t NDMA_MODE;
+    uint32_t RESERVED4[(0x200U - 0x8CU) / 4U];
     __IO uint32_t TXD;
-    uint32_t RESERVED4[(0x300U - 0x204U) / 4U];
+    uint32_t RESERVED5[(0x300U - 0x204U) / 4U];
     __IO uint32_t RXD;
 } SPI_TypeDef;
 #define SPI0 ((SPI_TypeDef *)0x05010000UL)
@@ -209,6 +212,7 @@ _Static_assert(offsetof(UART_TypeDef, USR) == 0x7C, "UART USR offset");
 _Static_assert(offsetof(UART_TypeDef, HALT) == 0xA4, "UART HALT offset");
 _Static_assert(offsetof(TIMER_TypeDef, CHANNEL[1]) == 0x20, "TIM1 offset");
 _Static_assert(offsetof(SPI_TypeDef, TXD) == 0x200, "SPI TXD offset");
+_Static_assert(offsetof(SPI_TypeDef, NDMA_MODE) == 0x88, "SPI DMA handshake offset");
 _Static_assert(offsetof(SPI_TypeDef, RXD) == 0x300, "SPI RXD offset");
 _Static_assert(offsetof(I2C_TypeDef, DRV_CTRL) == 0x200, "TWI driver offset");
 _Static_assert(offsetof(I2C_TypeDef, DRV_RECV_FIFO) == 0x304, "TWI RX FIFO offset");

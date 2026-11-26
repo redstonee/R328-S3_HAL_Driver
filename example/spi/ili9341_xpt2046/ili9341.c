@@ -1,4 +1,5 @@
 #include "ili9341.h"
+#include "display_bus.h"
 
 /* Example wiring: PH2 reset, PH3 D/C, PH4 CS, PH9 active-high backlight.
  * LCD commands are write-only; XPT2046 uses the shared MISO line.
@@ -15,18 +16,18 @@ void ILI9341_Backlight(uint32_t enabled)
 }
 static HAL_StatusTypeDef deselect(HAL_StatusTypeDef status)
 {
-    HAL_StatusTypeDef release = Board_SPI1_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
     return status != HAL_OK ? status : release;
 }
 /* Caller owns LCD CS; D/C may change only between completed byte transfers. */
 static HAL_StatusTypeDef command(uint8_t code, const uint8_t *data, uint32_t size)
 {
     HAL_GPIO_WritePin(GPIOH, LCD_DC, GPIO_PIN_RESET);
-    HAL_StatusTypeDef status = HAL_SPI_Transmit(&hspi1, &code, 1U, LCD_TIMEOUT);
+    HAL_StatusTypeDef status = Display_SPI_Transmit(&code, 1U, LCD_TIMEOUT);
     HAL_GPIO_WritePin(GPIOH, LCD_DC, GPIO_PIN_SET);
     if (status == HAL_OK && size != 0U)
     {
-        status = HAL_SPI_Transmit(&hspi1, data, size, LCD_TIMEOUT);
+        status = Display_SPI_Transmit(data, size, LCD_TIMEOUT);
     }
     return status;
 }
@@ -45,7 +46,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
     {
         return status;
     }
-    status = Board_SPI1_Init(DISPLAY_SPI_HZ);
+    status = Board_SPI1_Init(ILI9341_SPI_HZ);
     if (status != HAL_OK)
     {
         return status;
@@ -75,7 +76,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
         {0x13U, 0U, {0U}},                  /* Normal mode */
         {0x11U, 0U, {0U}},                  /* Sleep out */
     };
-    status = Board_SPI1_Select(BOARD_SPI_LCD);
+    status = Display_SPI_Select(BOARD_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;
@@ -90,7 +91,7 @@ HAL_StatusTypeDef ILI9341_Init(void)
         return status;
     }
     HAL_Delay(150U);
-    status = Board_SPI1_Select(BOARD_SPI_LCD);
+    status = Display_SPI_Select(BOARD_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;
@@ -136,14 +137,14 @@ HAL_StatusTypeDef ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint1
     uint16_t x_end = (uint16_t)(x + width - 1U), y_end = (uint16_t)(y + height - 1U);
     uint8_t columns[] = {(uint8_t)(x >> 8), (uint8_t)x, (uint8_t)(x_end >> 8), (uint8_t)x_end};
     uint8_t rows[] = {(uint8_t)(y >> 8), (uint8_t)y, (uint8_t)(y_end >> 8), (uint8_t)y_end};
-    /* Only 64 bytes of scratch: a full RGB565 framebuffer would need 150 KiB. */
-    uint8_t pixels[64];
+    /* Cross FIFO boundaries in all modes without allocating a framebuffer. */
+    uint8_t pixels[ILI9341_PIXEL_BUFFER_SIZE];
     for (uint32_t i = 0U; i < sizeof(pixels); i += 2U)
     {
         pixels[i] = (uint8_t)(rgb565 >> 8);
         pixels[i + 1U] = (uint8_t)rgb565;
     }
-    HAL_StatusTypeDef status = Board_SPI1_Select(BOARD_SPI_LCD);
+    HAL_StatusTypeDef status = Display_SPI_Select(BOARD_SPI_LCD);
     if (status != HAL_OK)
     {
         return status;
@@ -161,7 +162,7 @@ HAL_StatusTypeDef ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint1
     while (remaining != 0U && status == HAL_OK)
     {
         uint32_t count = remaining > sizeof(pixels) ? sizeof(pixels) : remaining;
-        status = HAL_SPI_Transmit(&hspi1, pixels, count, LCD_TIMEOUT);
+        status = Display_SPI_Transmit(pixels, count, LCD_TIMEOUT);
         remaining -= count;
     }
     /* Every error path releases LCD CS before touch or another device can run. */

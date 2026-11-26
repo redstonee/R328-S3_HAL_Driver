@@ -119,7 +119,7 @@ void R328_HAL_TestWrite32(volatile uint32_t *reg, uint32_t value)
         assert(twi_log_count < sizeof(twi_log));
         twi_log[twi_log_count++] = (uint8_t)value;
     }
-    if (reg == &RCC_PLL_AUDIO_CTRL)
+    if (reg == &RCC_PLL_AUDIO_CTRL || reg == &RCC_PLL_PERI0_CTRL)
     {
         *reg = value | (((value & (1UL << 31)) != 0U && !stuck_pll) ? 1UL << 28 : 0U);
         return;
@@ -340,6 +340,62 @@ static void test_spi(void)
     hspi1.Init.BaudRateHz = 1U;
     assert(HAL_SPI_Init(&hspi1) == HAL_ERROR);
     assert(HAL_SPI_DeInit(&hspi1) == HAL_OK);
+}
+static void test_spi_clocks(void)
+{
+    /* The default LCD rate needs PLL_PERI0; the touch rate keeps OSC24M. */
+    RCC_PLL_PERI0_CTRL = 0x08003100U;
+    assert(Board_SPI1_Init(10000000U) == HAL_OK);
+    assert(hspi1.ActualBaudRateHz == 10000000U);
+    assert(RCC_SPI_CLK(1) == 0x81000002U && SPI1->CCR == 0x1009U);
+    assert((RCC_PLL_PERI0_CTRL & 0xB800FFFFU) == 0xB8003100U);
+    uint32_t pll = RCC_PLL_PERI0_CTRL;
+    DMA_HandleTypeDef tx = {0}, rx = {0};
+    hspi1.hdmatx = &tx;
+    hspi1.hdmarx = &rx;
+    assert(HAL_SPI_SetAsyncTimeout(&hspi1, 77U) == HAL_OK);
+    const uint32_t rates[] = {25000000U,  40000000U, 50000000U, 60000000U,
+                              100000000U, 999999U,   2000000U,  10000000U};
+    for (uint32_t i = 0U; i < sizeof(rates) / sizeof(rates[0]); ++i)
+    {
+        uint32_t tcr = SPI1->TCR;
+        assert(HAL_SPI_SetBaudRate(&hspi1, rates[i]) == HAL_OK);
+        uint32_t module = (RCC_SPI_CLK(1) & (7U << 24)) == 0U ? R328_OSC24M_HZ : 200000000U;
+        uint32_t divisor = (SPI1->CCR & (1U << 12)) != 0U ? 2U * ((SPI1->CCR & 255U) + 1U)
+                                                          : 1U << ((SPI1->CCR >> 8) & 15U);
+        assert((uint64_t)module <= (uint64_t)rates[i] * divisor);
+        assert(hspi1.ActualBaudRateHz == module / divisor);
+        assert((SPI1->TCR & ~0x2800U) == (tcr & ~0x2800U));
+        uint32_t sample = hspi1.ActualBaudRateHz <= 24000000U   ? 0x2000U
+                          : hspi1.ActualBaudRateHz >= 60000000U ? 0x0800U
+                                                                : 0U;
+        assert((SPI1->TCR & 0x2800U) == sample);
+        assert(hspi1.hdmatx == &tx && hspi1.hdmarx == &rx && hspi1.XferTimeout == 77U);
+        assert(RCC_PLL_PERI0_CTRL == pll); /* Reuse a running PLL without retuning. */
+    }
+    assert(HAL_SPI_SetBaudRate(&hspi1, 100000000U) == HAL_OK);
+    assert(hspi1.ActualBaudRateHz == 100000000U);
+    uint32_t clock = RCC_SPI_CLK(1), ccr = SPI1->CCR;
+    assert(HAL_SPI_SetBaudRate(&hspi1, 100000001U) == HAL_ERROR);
+    assert(HAL_SPI_SetBaudRate(&hspi1, 0U) == HAL_ERROR);
+    assert(HAL_SPI_SetBaudRate(&hspi1, 1U) == HAL_ERROR);
+    assert(RCC_SPI_CLK(1) == clock && SPI1->CCR == ccr);
+    RCC_PLL_PERI0_CTRL = 0xB8003000U; /* Enabled at a different rate: preserve it. */
+    assert(HAL_SPI_SetBaudRate(&hspi1, 10000000U) == HAL_ERROR);
+    assert(RCC_PLL_PERI0_CTRL == 0xB8003000U && RCC_SPI_CLK(1) == clock && SPI1->CCR == ccr);
+    assert(HAL_SPI_SetBaudRate(&hspi1, 2000000U) == HAL_OK);
+    assert(hspi1.ActualBaudRateHz == 2000000U && RCC_SPI_CLK(1) == 0x80000000U);
+    RCC_PLL_PERI0_CTRL = 0x08003100U;
+    stuck_pll = 1;
+    assert(HAL_SPI_SetBaudRate(&hspi1, 10000000U) == HAL_TIMEOUT);
+    assert(RCC_PLL_PERI0_CTRL == 0x08003100U && RCC_SPI_CLK(1) == 0x80000000U);
+    assert(hspi1.State == HAL_SPI_STATE_READY && hspi1.Lock == HAL_UNLOCKED);
+    assert(hspi1.ActualBaudRateHz == 2000000U && hspi1.Init.BaudRateHz == 2000000U);
+    stuck_pll = 0;
+    assert(HAL_SPI_SetBaudRate(&hspi1, 10000000U) == HAL_OK);
+    assert(HAL_SPI_DeInit(&hspi1) == HAL_OK);
+    assert(HAL_SPI_SetBaudRate(&hspi1, 10000000U) == HAL_ERROR);
+    hspi1.hdmatx = hspi1.hdmarx = NULL;
 }
 static void test_i2c(void)
 {
@@ -716,6 +772,7 @@ int main(void)
     RCC_SPI_BGR = 0x10001U; /* Enabling SPI1 must preserve unrelated SPI0 bits. */
     GPIOH->CFG[0] = 0x33U;  /* Existing PH0/1 UART mux must survive. */
     test_spi();
+    test_spi_clocks();
     test_i2c();
     test_i2c_async();
     test_i2s();

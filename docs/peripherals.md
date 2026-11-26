@@ -26,9 +26,11 @@ I²C 和 I²S 对应封装为 `Board_I2C1_Init(100000U)`、`Board_I2S0_Init(4800
 
 ## SPI
 
-支持 SPI0/1 主机、8 位字长、模式 0–3、MSB/LSB first，以及轮询发送、接收和全双工。模块时钟使用 OSC24M，最高 SCLK 为 12 MHz；从两种分频器选择不超过请求值的最快速率，实际值在 `ActualBaudRateHz`。纯接收时 MOSI 发送 `0xFF`。
+支持 SPI0/1 主机、8 位字长、模式 0–3、MSB/LSB first，以及轮询 / IRQ / DMA 发送、接收和全双工。最高 SCLK 为 100 MHz。驱动在 OSC24M 与 `PLL_PERI0(1X) / 3 = 200 MHz` 两个模块时钟及两种 CCR 分频器中选择不超过请求值的最快速率，相同时优先 OSC24M；实际值在 `ActualBaudRateHz`。例如 2 MHz 使用 OSC24M / 12，10 MHz 使用 200 MHz / 20，100 MHz 使用 200 MHz / 2。纯接收时 MOSI 发送 `0xFF`。
 
-每批最多 64 字节，预填 TX FIFO 后启动交换。长调用在批次之间可能有时钟间隙；控制器片选在整次调用内保持有效。需要连续无间隙时钟的设备应使用后续 DMA 实现。
+需要 PLL 时，驱动启用并等待固定 600 MHz 的 PLL_PERI0(1X) 锁定，已开启则复用，不重调其他总线与存储共用的 PLL。已开启 PLL 的频率或输出配置不兼容时返回 `HAL_ERROR`，锁定超时返回 `HAL_TIMEOUT`。采样模式随实际 SCLK 配置：不超过 24 MHz 使用正常采样，24–60 MHz 使用半周期延迟，达到 60 MHz 使用一周期延迟。高速外设、接线与 GPIO 驱动强度需分别验证。
+
+轮询和中断模式每批最多 64 字节，预填 TX FIFO 后启动交换。长调用在批次之间可能有时钟间隙；控制器片选在整次调用内保持有效。DMA 使用一次交换，由硬件持续补充和排空 FIFO；RX 满时控制器可暂停时钟，不保证绝对无间隙。
 
 例程通过 `SPI_NSS_SOFT` 和 GPIO 管理共享总线片选：
 
@@ -42,11 +44,37 @@ if (Board_SPI1_Select(BOARD_SPI_LCD) == HAL_OK) {
 }
 ```
 
-一次完整设备事务包含选中、命令、数据和释放，须由应用串行执行。句柄锁不覆盖多次 HAL 调用，不能从 IRQ 插入另一设备事务。更改模式或速率前释放全部片选，再修改 `Init` 并重新初始化。
+一次完整设备事务包含选中、命令、数据和释放，须由应用串行执行。句柄锁不覆盖多次 HAL 调用，不能从 IRQ 插入另一设备事务。更改模式前释放全部片选，再修改 `Init` 并重新初始化。仅更改速率可在 READY 且全部片选释放时调用 `HAL_SPI_SetBaudRate(&hspi1, hz)`；该接口保留 DMA 连接与异步超时配置，BUSY 时拒绝调速。PLL 配置失败时保持原速率，不能继续选中目标设备传输。
 
 `SPI_NSS_HARD_OUTPUT` 使用 `Init.ChipSelect=0..3`，由控制器管理选定 SS；对应复用引脚需在 MSP 中配置。
 
 FIFO 错误或超时通过 CCU 复位终止交换，句柄回到 RESET。重新调用 `HAL_SPI_Init()` 后才可重试；GPIO 片选仍由应用释放。
+
+### 中断与 DMA
+
+`HAL_SPI_Transmit/Receive/TransmitReceive` 均有 `_IT` / `_DMA` 版本，无 timeout 参数，启动成功返回 `HAL_OK`，完成后返回 READY。三个方向均支持；纯接收由硬件发送 `0xFF`，不需要额外 TX DMA。异步长度必须大于零；DMA 单次长度不超过 `0xFFFFFF` 字节（24 位交换计数）。全双工 DMA 的 TX/RX 缓冲区必须分离，禁止重叠。
+
+`_IT` 自动注册 SPI GIC 中断，在 TC 中断中收取当前批次并预填下一批，保留片选。`_DMA` 使用初始化并连接到 `hdmatx/hdmarx` 的 DMA 句柄，SPI0/1 请求号为 22/23；全双工需要两个不同通道。RX 通道先启动，TX 在启动交换前短暂等待 DMA 预填，避免空 FIFO 起传。DMA 通道采用请求握手，SPI 的 NDMA_MODE 配置为控制器驱动握手信号。
+
+```c
+static DMA_HandleTypeDef tx = {.Init = {0U, DMA_MEMORY_TO_PERIPH, DMA_REQUEST_SPI1}};
+static DMA_HandleTypeDef rx = {.Init = {1U, DMA_PERIPH_TO_MEMORY, DMA_REQUEST_SPI1}};
+static uint8_t send[131], receive[131];
+HAL_DMA_Init(&tx);
+HAL_DMA_Init(&rx);
+hspi1.hdmatx = &tx;
+hspi1.hdmarx = &rx;
+HAL_SPI_TransmitReceive_DMA(&hspi1, send, receive, sizeof(send));
+/* Call HAL_SPI_Process(&hspi1) regularly in the foreground until callback. */
+```
+
+前台定期调用 `HAL_SPI_Process()`，负责最终完成与超时；IRQ / DMA 负责实际数据搬运。`HAL_SPI_TxCpltCallback` / `RxCpltCallback` / `TxRxCpltCallback` / `ErrorCallback` 均在 Process 或 Abort 的前台上下文执行，回调前已解锁。SPI TC、交换停止以及所有所需 DMA 通道完成后才释放缓冲区；DMA 完成后还检查 FIFO 无残留。所有传输 API 仅从 CPU0 前台调用，不在其他 IRQ 中交叉操作。
+
+默认异步超时为 100 ms，READY 时可调用 `HAL_SPI_SetAsyncTimeout()` 修改；`HAL_MAX_DELAY` 禁用期限，零值无效。长事务应按速率增加期限。`HAL_SPI_Abort()` 通过复位控制器并停止 DMA 中止传输，以 `HAL_SPI_ERROR_ABORT`（8）报告并使句柄 RESET，需重新 Init。FIFO 错误（1）、超时（2）、DMA 错误（4）同样复位；GPIO CS 由应用释放。
+
+已启动的 DMA 若中止超时，SPI 保持 BUSY 与缓冲区所有权，后续 Process 重试清理。通常启动失败不触发回调；如果部分通道已启动且无法停止，启动返回 `HAL_TIMEOUT`，保留 BUSY，最终清理后触发错误回调。句柄 BUSY 时不能释放或修改缓冲区、DMA 句柄和配置。DMA 缓冲区必须完整位于 SRAM `0x20000..0x3FFFF` 或 DDR `0x40000000..0x47FFFFFF`，MMU / D-cache 保持关闭；调用栈上的缓冲区也须等最终回调后才离开作用域。
+
+[ILI9341 + XPT2046 例程](../example/spi/ili9341_xpt2046/README.md) 使用同一组设备测试三种模式，显示辅助层会等待异步完成后才更改 D/C 或片选。
 
 ## I²C / TWI
 
@@ -150,9 +178,11 @@ PE2 的 AF2 由 MSP 配置，BSP 不在默认启动流程中开启 LEDC。灯效
 
 ## 例程与验证
 
-见 [独立例程](../example/README.md)、[ILI9341 + XPT2046](../example/spi/ili9341/README.md) 和 [WS2812](../example/ledc/README.md)。默认应用不主动初始化 SPI、I²C、I²S 或 LEDC。
+见 [独立例程](../example/README.md)、[ILI9341 + XPT2046](../example/spi/ili9341_xpt2046/README.md) 和 [WS2812](../example/ledc/README.md)。默认应用不主动初始化 SPI、I²C、I²S 或 LEDC。
 
 主机模型覆盖 SPI 跨 FIFO 收发、片选保持、I²C repeated START / NACK / 仲裁丢失、I²S FIFO / 声道映射、PLL 共享和错误恢复。显示模型另检查像素格式、裁剪、触摸解码与事务切换。模型不模拟真实时钟、电气和信号时序。
+
+SPI1 的轮询、中断和 DMA 已通过 FEL SRAM 实板验证：原先 LCD / 触摸均为 2 MHz，以及当前 LCD 10 MHz / 触摸 2 MHz 的 mode 0 配置，三种模式的色条、边框与触摸画点均正常。当前配置的启动串口频率输出也已确认正确。操作见 [触屏例程](../example/spi/ili9341_xpt2046/README.md)。
 
 LEDC 主机模型另覆盖时序字段、32 字 FIFO、最大帧、超时和异常恢复；4 颗 WS2812 已通过 FEL SRAM 实板灯效及串口运行验证。
 

@@ -4,8 +4,11 @@
 
 #define ILI9341_WIDTH 240U
 #define ILI9341_HEIGHT 320U
-/* Both devices use mode 0 at 2 MHz: no speed changes while sharing SPI1. */
-#define DISPLAY_SPI_HZ 2000000U
+/* Datasheet write limit: 10 MHz. Faster rates require panel/wiring validation. */
+#ifndef ILI9341_SPI_HZ
+#define ILI9341_SPI_HZ 10000000U
+#endif
+#define ILI9341_PIXEL_BUFFER_SIZE 256U /* Four hardware FIFOs; no framebuffer. */
 #define ILI9341_BLACK 0x0000U
 #define ILI9341_WHITE 0xFFFFU
 #define ILI9341_RED 0xF800U

@@ -6,6 +6,10 @@ I2S_HandleTypeDef hi2s0;
 
 HAL_StatusTypeDef Board_SPI1_Init(uint32_t baud_rate_hz)
 {
+    if (hspi1.State == HAL_SPI_STATE_BUSY)
+    {
+        return HAL_BUSY;
+    }
     hspi1.Instance = SPI1;
     hspi1.Init = (SPI_InitTypeDef){.Mode = SPI_MODE_MASTER,
                                    .DataSize = SPI_DATASIZE_8BIT,

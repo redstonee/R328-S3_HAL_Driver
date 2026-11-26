@@ -49,14 +49,72 @@ HAL_StatusTypeDef HAL_RCC_LEDC_ForceReset(LEDC_TypeDef *instance)
 }
 HAL_StatusTypeDef HAL_RCC_SPI_EnableClock(SPI_TypeDef *instance)
 {
+    return HAL_RCC_SPI_ConfigClock(instance, RCC_SPI_CLOCK_OSC24M);
+}
+static HAL_StatusTypeDef spi_peri0_enable(void)
+{
+    const uint32_t enable = 1UL << 31, lock_enable = 1UL << 29, locked = 1UL << 28;
+    const uint32_t output_enable = 1UL << 27;
+    uint32_t previous = BUS_READ(RCC_PLL_PERI0_CTRL);
+    uint32_t control = previous;
+    if ((control & enable) != 0U)
+    {
+        uint64_t frequency = (uint64_t)R328_OSC24M_HZ * (((control >> 8) & 0xFFU) + 1U) /
+                             ((control & 1U) + 1U) / (((control >> 1) & 1U) + 1U) / 2U;
+        if (frequency != 600000000U || (control & output_enable) == 0U ||
+            (control & (1UL << 23)) != 0U)
+        {
+            return HAL_ERROR; /* Shared with buses, storage, etc.; never retune it. */
+        }
+        if ((control & locked) != 0U)
+        {
+            return HAL_OK;
+        }
+    }
+    else
+    {
+        /* Manual 3.3.5.3: fixed 1.2 GHz (2X), hence 600 MHz (1X). */
+        control = (control & ~((0xFFUL << 8) | 3UL | (1UL << 23) | lock_enable)) | output_enable |
+                  (49U << 8);
+        BUS_WRITE(RCC_PLL_PERI0_CTRL, control);
+        control |= enable;
+        BUS_WRITE(RCC_PLL_PERI0_CTRL, control);
+    }
+    BUS_WRITE(RCC_PLL_PERI0_CTRL, control | lock_enable);
+    R328_DSB();
+    for (uint32_t count = 0U; count < HAL_REGISTER_POLL_LIMIT; ++count)
+    {
+        if ((BUS_READ(RCC_PLL_PERI0_CTRL) & locked) != 0U)
+        {
+            return HAL_OK;
+        }
+    }
+    BUS_WRITE(RCC_PLL_PERI0_CTRL, previous);
+    return HAL_TIMEOUT;
+}
+HAL_StatusTypeDef HAL_RCC_SPI_ConfigClock(SPI_TypeDef *instance, uint32_t module_hz)
+{
     int index = spi_index(instance);
-    if (index < 0)
+    if (index < 0 || (module_hz != RCC_SPI_CLOCK_OSC24M && module_hz != RCC_SPI_CLOCK_PERI0))
     {
         return HAL_ERROR;
     }
-    /* Fixed OSC24M module clock; CCR supplies the serial divider. */
-    BUS_WRITE(RCC_SPI_CLK((uint32_t)index), 1UL << 31);
+    uint32_t config = 0U;
+    if (module_hz == RCC_SPI_CLOCK_PERI0)
+    {
+        HAL_StatusTypeDef status = spi_peri0_enable();
+        if (status != HAL_OK)
+        {
+            return status;
+        }
+        config = (1U << 24) | 2U; /* 600 MHz / M=3 / N=1 = 200 MHz. */
+    }
+    uint32_t irq = R328_IRQ_Save();
+    BUS_WRITE(RCC_SPI_CLK((uint32_t)index), BUS_READ(RCC_SPI_CLK((uint32_t)index)) & ~(1UL << 31));
     R328_DSB();
+    BUS_WRITE(RCC_SPI_CLK((uint32_t)index), config | (1UL << 31));
+    R328_DSB();
+    R328_IRQ_Restore(irq);
     return gate_reset(&RCC_SPI_BGR, index, 0);
 }
 HAL_StatusTypeDef HAL_RCC_SPI_ForceReset(SPI_TypeDef *instance)

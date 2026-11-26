@@ -2,6 +2,8 @@
 #define EXAMPLE_XPT2046_H
 #include "board.h"
 
+#define XPT2046_SPI_HZ 2000000U
+
 /* Starting estimates only: record raw readings near each edge to calibrate.
  * Adjust axis swapping and inversion for the panel wiring and orientation. */
 #define TOUCH_RAW_X_MIN 200U

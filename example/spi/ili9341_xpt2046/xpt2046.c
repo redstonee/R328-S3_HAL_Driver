@@ -1,5 +1,6 @@
 #include "xpt2046.h"
 #include "ili9341.h"
+#include "display_bus.h"
 
 #define TOUCH_IRQ GPIO_PIN_13 /* PB13, active low; PB12 BUSY is not needed here. */
 static uint32_t initialized;
@@ -11,7 +12,7 @@ _Static_assert(TOUCH_RAW_Y_MAX > TOUCH_RAW_Y_MIN && TOUCH_RAW_Y_MAX <= 4095U,
 static HAL_StatusTypeDef conversion(uint8_t control, uint16_t *value)
 {
     uint8_t tx[3] = {control, 0U, 0U}, rx[3];
-    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(&hspi1, tx, rx, sizeof(tx), 20U);
+    HAL_StatusTypeDef status = Display_SPI_TransmitReceive(tx, rx, sizeof(tx), 20U);
     if (status == HAL_OK)
     {
         /* Discard dummy leading bit and three trailing bits; MSB first. */
@@ -48,9 +49,9 @@ static HAL_StatusTypeDef median_axis(uint8_t control, uint16_t *value)
 static int bus_ready(void)
 {
     return hspi1.Instance == SPI1 && hspi1.State == HAL_SPI_STATE_READY &&
-           hspi1.ActualBaudRateHz != 0U && hspi1.ActualBaudRateHz <= DISPLAY_SPI_HZ &&
-           hspi1.Init.CLKPolarity == SPI_POLARITY_LOW && hspi1.Init.CLKPhase == SPI_PHASE_1EDGE &&
-           hspi1.Init.NSS == SPI_NSS_SOFT && hspi1.Init.FirstBit == SPI_FIRSTBIT_MSB;
+           hspi1.ActualBaudRateHz != 0U && hspi1.Init.CLKPolarity == SPI_POLARITY_LOW &&
+           hspi1.Init.CLKPhase == SPI_PHASE_1EDGE && hspi1.Init.NSS == SPI_NSS_SOFT &&
+           hspi1.Init.FirstBit == SPI_FIRSTBIT_MSB;
 }
 HAL_StatusTypeDef XPT2046_Init(void)
 {
@@ -66,7 +67,7 @@ HAL_StatusTypeDef XPT2046_Init(void)
     {
         return status;
     }
-    status = Board_SPI1_Select(BOARD_SPI_TOUCH);
+    status = Display_SPI_Select(BOARD_SPI_TOUCH);
     if (status != HAL_OK)
     {
         return status;
@@ -74,7 +75,7 @@ HAL_StatusTypeDef XPT2046_Init(void)
     uint16_t discarded;
     /* 12-bit, differential, PD1:0=00: internal reference off, PENIRQ enabled. */
     status = conversion(0x90U, &discarded);
-    HAL_StatusTypeDef release = Board_SPI1_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
     if (status == HAL_OK)
     {
         status = release;
@@ -100,7 +101,7 @@ HAL_StatusTypeDef XPT2046_ReadRaw(XPT2046_Point *point)
     {
         return HAL_OK;
     }
-    HAL_StatusTypeDef status = Board_SPI1_Select(BOARD_SPI_TOUCH);
+    HAL_StatusTypeDef status = Display_SPI_Select(BOARD_SPI_TOUCH);
     if (status != HAL_OK)
     {
         return status;
@@ -112,7 +113,7 @@ HAL_StatusTypeDef XPT2046_ReadRaw(XPT2046_Point *point)
     {
         status = median_axis(0x90U, &point->y);
     }
-    HAL_StatusTypeDef release = Board_SPI1_Select(BOARD_SPI_NONE);
+    HAL_StatusTypeDef release = Display_SPI_Select(BOARD_SPI_NONE);
     if (status == HAL_OK)
     {
         status = release;

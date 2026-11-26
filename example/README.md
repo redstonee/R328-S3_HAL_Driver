@@ -15,7 +15,7 @@
 | 时基 | [timeout](timebase/timeout/main.c) | 250 ms / 1 s 非阻塞任务与超时差值 |
 | [SPI](spi/README.md) | [clocks](spi/clocks/main.c) | 保持片选无效，发送测试时钟与数据 |
 | SPI | [loopback](spi/loopback/main.c) | 外部 MOSI/MISO 环回，校验跨 FIFO 的 131 字节 |
-| SPI | [ili9341](spi/ili9341/README.md) | ILI9341 色条与 XPT2046 触摸轨迹，共享 SPI |
+| SPI | [ili9341_xpt2046](spi/ili9341_xpt2046/README.md) | ILI9341 色条与 XPT2046 触摸轨迹，轮询 / IRQ / DMA |
 | [I²C](i2c/README.md) | [probe](i2c/probe/main.c) | 探测地址 0x50，报告 NACK / 错误码 |
 | I²C | [scan](i2c/scan/main.c) | 扫描 0x08–0x77，支持重新扫描 |
 | I²C | [memory](i2c/memory/main.c) | 可配置设备与寄存器地址，重复 START 读取 |
@@ -52,10 +52,10 @@ cmake --build build/fel-debug --target fel-run
 | GPIO 的三个例程 | 无 | `gpio/gpio_example.h` |
 | I²C memory | 无 | `i2c/memory/config.h` |
 | I²C BMP280 | `i2c/bmp280/bmp280.c` | `i2c/bmp280/bmp280.h` |
-| SPI 显示 / 触摸 | `spi/ili9341/ili9341.c`、`spi/ili9341/xpt2046.c` | `spi/ili9341/ili9341.h`、`spi/ili9341/xpt2046.h` |
+| SPI 显示 / 触摸 | `spi/ili9341_xpt2046/ili9341.c`、`spi/ili9341_xpt2046/xpt2046.c`、`spi/ili9341_xpt2046/display_bus.c` | `spi/ili9341_xpt2046/ili9341.h`、`spi/ili9341_xpt2046/xpt2046.h`、`spi/ili9341_xpt2046/display_bus.h` |
 | 其余例程 | 无 | 无 |
 
-表中的源路径相对于 `example/`。显示 / 触摸的完整复制命令见 [ILI9341 + XPT2046](spi/ili9341/README.md)。切换例程时，移出上一个例程附加的文件；恢复自己的应用时，也应移出公共 `example.c`，避免重复定义 `SystemClock_Config()` 和 `Error_Handler()`。
+表中的源路径相对于 `example/`。显示 / 触摸的完整复制命令见 [ILI9341 + XPT2046](spi/ili9341_xpt2046/README.md)。切换例程时，移出上一个例程附加的文件；恢复自己的应用时，也应移出公共 `example.c`，避免重复定义 `SystemClock_Config()` 和 `Error_Handler()`。
 
 同一份 `Core` 源码可使用不同内存与加载预设：
 
@@ -74,6 +74,6 @@ xfel 不在 PATH 时，配置阶段增加 `-DR328_XFEL=/absolute/path/to/xfel`�
 
 外设默认引脚见 [接口说明](../docs/peripherals.md)。复制后在 `Core/Inc/gpio_example.h` 中修改 GPIO 引脚，在 `Core/Inc/config.h` 中修改 I²C 读取参数，在 `Core/Inc/ili9341.h`、`Core/Inc/xpt2046.h` 中修改显示控制脚与触摸参数；需要调整面板初始化序列时修改 `Core/Src/ili9341.c`。
 
-例程共用轮询式 HAL。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
+SPI 显示/触摸和 I²C BMP280 例程支持轮询、中断、DMA 切换，异步完成与超时在前台 Process 中处理。GPIO 和 Timer IRQ 回调只记录事件，耗时处理放在前台；仅有自由运行计数器时不能依靠 WFI 唤醒。I²S 为有限块传输，连续播放仍需 DMA 或中断环形缓冲。
 
 主机测试验证寄存器、IRQ 分发与协议逻辑；交叉构建检查镜像入口和内存布局。实际信号、显示效果与触摸校准需在目标硬件上验证。

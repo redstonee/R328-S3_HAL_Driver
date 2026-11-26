@@ -24,7 +24,7 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 
 `Board_Init()` 将两颗普通 LED 初始化为熄灭：蓝色 LED2 为 PB6，红色 LED3 为 PB7，均高电平点亮。使用 `Board_LED_On(BOARD_LED_BLUE)`、`Board_LED_Off(BOARD_LED_RED)` 或 `Board_LED_Toggle(BOARD_LED_RED)` 独立控制；默认程序每秒翻转两颗灯。引脚复用作其他用途时可将 `BOARD_LED_ENABLE` 设为 0。
 
-应用源码统一放在 `Core/Src/`，头文件放在 `Core/Inc/`。运行例程时，将对应的 `main.c`、公共文件和设备文件复制到 `Core`，继续使用相同的内存 / 加载预设。复制步骤见 [例程索引](example/README.md)，显示与触摸见 [ILI9341 + XPT2046](example/spi/ili9341/README.md)。
+应用源码统一放在 `Core/Src/`，头文件放在 `Core/Inc/`。运行例程时，将对应的 `main.c`、公共文件和设备文件复制到 `Core`，继续使用相同的内存 / 加载预设。复制步骤见 [例程索引](example/README.md)，显示与触摸见 [ILI9341 + XPT2046](example/spi/ili9341_xpt2046/README.md)。
 
 ## 功能
 
@@ -34,9 +34,9 @@ xfel 不在 PATH 时，在配置命令后增加 `-DR328_XFEL=/absolute/path/to/x
 | GPIO | 输入、推挽输出、复用、上下拉、驱动强度、端口读写、EINT 与中断回调 |
 | RCC | APB2、UART/SPI/TWI/I²S/LEDC 时钟与复位、音频 PLL |
 | UART | UART0–3 轮询收发、7/8 数据位、校验、超时与错误状态 |
-| SPI | SPI0/1 主机、模式 0–3、8 位轮询、软件或控制器片选 |
+| SPI | SPI0/1 主机、模式 0–3、8 位轮询 / IRQ / DMA、软件或控制器片选 |
 | I²C / TWI | TWI0/1、7 位主机、最高 400 kHz、轮询 / IRQ / DMA、寄存器读写与重复 START |
-| DMA | 10 通道、字节宽度单次外设传输、描述符与完成中断；已接入 I²C |
+| DMA | 10 通道、字节宽度单次外设传输、描述符与完成中断；已接入 SPI / I²C |
 | I²S / IIS | I2S0/1/2、立体声、16/24/32 位、主从模式、有限块轮询收发 |
 | LEDC | 硬件 WS2812 时序、1–1024 灯整帧轮询发送、GRB 格式、超时与错误恢复 |
 | TIM / GIC | Timer0/1、周期与单次模式、IRQ 注册、回调与分发 |

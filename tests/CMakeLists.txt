@@ -40,6 +40,17 @@ target_compile_definitions(
 )
 target_compile_options(bus_register_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME bus_register_logic COMMAND bus_register_tests)
+add_executable(
+    spi_async_tests spi_async_tests.c ${HAL_DIR}/Src/r328_hal_spi.c
+                    ${HAL_DIR}/Src/r328_hal_dma.c ${HAL_DIR}/Src/r328_hal_gic.c
+                    ${HAL_DIR}/Src/r328_hal_bus_rcc.c
+)
+target_include_directories(
+    spi_async_tests PRIVATE ${HAL_DIR}/Inc ../Drivers/Device/Include ../Core/Inc
+)
+target_compile_definitions(spi_async_tests PRIVATE R328_HAL_HOST_TEST=1 _DEFAULT_SOURCE=1)
+target_compile_options(spi_async_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
+add_test(NAME spi_async_logic COMMAND spi_async_tests)
 add_executable(bmp280_tests bmp280_tests.c ../example/i2c/bmp280/bmp280.c)
 target_include_directories(bmp280_tests PRIVATE ../example/i2c/bmp280)
 target_compile_options(bmp280_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
@@ -65,12 +76,12 @@ target_compile_definitions(hal_timebase_tests PRIVATE R328_HAL_HOST_TEST=1)
 target_compile_options(hal_timebase_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)
 add_test(NAME hal_timebase COMMAND hal_timebase_tests)
 add_executable(
-    display_example_tests display_example_tests.c ../example/spi/ili9341/ili9341.c
-                          ../example/spi/ili9341/xpt2046.c
+    display_example_tests display_example_tests.c ../example/spi/ili9341_xpt2046/ili9341.c
+                          ../example/spi/ili9341_xpt2046/xpt2046.c ../example/spi/ili9341_xpt2046/display_bus.c
 )
 target_include_directories(
     display_example_tests PRIVATE ${HAL_DIR}/Inc ../Drivers/Device/Include ../Core/Inc ../BSP/Inc
-                                  ../example/spi/ili9341
+                                  ../example/spi/ili9341_xpt2046
 )
 target_compile_definitions(display_example_tests PRIVATE R328_HAL_HOST_TEST=1)
 target_compile_options(display_example_tests PRIVATE -Wall -Wextra -Werror -Wshadow -UNDEBUG)

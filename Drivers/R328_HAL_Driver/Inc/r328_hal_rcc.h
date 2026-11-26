@@ -8,6 +8,10 @@ uint32_t HAL_RCC_GetPCLK2Freq(void);
 HAL_StatusTypeDef HAL_RCC_UART_EnableClock(UART_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_UART_ForceReset(UART_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_SPI_EnableClock(SPI_TypeDef *instance);
+#define RCC_SPI_CLOCK_OSC24M R328_OSC24M_HZ
+#define RCC_SPI_CLOCK_PERI0 200000000U /* PLL_PERI0(1X) / 3 */
+/* Configure an idle controller. Does not retune an enabled shared PLL. */
+HAL_StatusTypeDef HAL_RCC_SPI_ConfigClock(SPI_TypeDef *instance, uint32_t module_hz);
 HAL_StatusTypeDef HAL_RCC_SPI_ForceReset(SPI_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_I2C_EnableClock(I2C_TypeDef *instance);
 HAL_StatusTypeDef HAL_RCC_I2C_ForceReset(I2C_TypeDef *instance);
